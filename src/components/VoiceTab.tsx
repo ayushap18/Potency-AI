@@ -21,6 +21,8 @@ export function VoiceTab() {
   const micRef = useRef<AudioCapture | null>(null);
   const pipelineRef = useRef<VoicePipeline | null>(null);
   const vadUnsub = useRef<(() => void) | null>(null);
+  // Stable ref so VAD callback always sees the latest processSpeech without stale closure
+  const processSpeechRef = useRef<((audio: Float32Array) => void) | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -85,7 +87,7 @@ export function VoiceTab() {
       if (activity === SpeechActivity.Ended) {
         const segment = VAD.popSpeechSegment();
         if (segment && segment.samples.length > 1600) {
-          processSpeech(segment.samples);
+          processSpeechRef.current?.(segment.samples);
         }
       }
     });
@@ -98,6 +100,7 @@ export function VoiceTab() {
 
   // Process a speech segment through the full pipeline
   const processSpeech = useCallback(async (audioData: Float32Array) => {
+
     const pipeline = pipelineRef.current;
     if (!pipeline) return;
 
@@ -146,6 +149,9 @@ export function VoiceTab() {
     setAudioLevel(0);
   }, []);
 
+  // Keep ref in sync so VAD callback always calls the latest version
+  processSpeechRef.current = processSpeech;
+
   const stopListening = useCallback(() => {
     micRef.current?.stop();
     vadUnsub.current?.();
@@ -162,7 +168,7 @@ export function VoiceTab() {
   ].filter((l) => l.loader.state !== 'ready');
 
   return (
-    <div className="tab-panel voice-panel">
+    <div className="flex-1 flex flex-col p-4 md:p-8 bg-surface space-y-8 animate-fade-in custom-scrollbar">
       {pendingLoaders.length > 0 && voiceState === 'idle' && (
         <ModelBanner
           state={pendingLoaders[0].loader.state}
@@ -173,49 +179,87 @@ export function VoiceTab() {
         />
       )}
 
-      {error && <div className="model-banner"><span className="error-text">{error}</span></div>}
+      {error && <div className="bg-error-container text-on-error-container p-4 rounded-lg"><span className="font-mono text-sm">{error}</span></div>}
 
-      <div className="voice-center">
-        <div className="voice-orb" data-state={voiceState} style={{ '--level': audioLevel } as React.CSSProperties}>
-          <div className="voice-orb-inner" />
-        </div>
+      <div className="max-w-6xl mx-auto w-full space-y-8 relative">
+        <section className="relative bg-surface-container-low rounded-2xl p-12 overflow-hidden flex flex-col items-center justify-center text-center shadow-lg border border-outline-variant/10">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] rounded-full -mr-32 -mt-32"></div>
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-secondary/5 blur-[80px] rounded-full -ml-24 -mb-24"></div>
+          
+          <div className="mb-4 relative z-10">
+            <span className="text-primary text-xs font-bold tracking-[0.2em] uppercase">
+              {voiceState === 'idle' ? 'Ready to Listen' : voiceState}
+            </span>
+            <h1 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight mt-2">Speech to Intelligence</h1>
+          </div>
 
-        <p className="voice-status">
-          {voiceState === 'idle' && 'Tap to start listening'}
-          {voiceState === 'loading-models' && 'Loading models...'}
-          {voiceState === 'listening' && 'Listening... speak now'}
-          {voiceState === 'processing' && 'Processing...'}
-          {voiceState === 'speaking' && 'Speaking...'}
-        </p>
+          <div className="my-12 flex flex-col items-center gap-10 w-full relative z-10">
+            <div className="relative group">
+              <div 
+                className={`absolute inset-0 bg-primary/20 rounded-full blur-2xl group-hover:bg-primary/40 transition-all duration-500
+                 ${voiceState === 'listening' ? 'animate-pulse bg-primary/50' : ''}`}
+                style={voiceState === 'listening' ? { transform: `scale(${1 + audioLevel * 2})` } : {}}
+              ></div>
+              <button 
+                onClick={voiceState === 'idle' ? startListening : stopListening}
+                disabled={voiceState === 'loading-models'}
+                className="relative w-32 h-32 rounded-full bg-gradient-to-br from-primary to-primary-container flex items-center justify-center mic-glow transition-transform active:scale-95 z-10"
+              >
+                <span className={`material-symbols-outlined text-4xl ${voiceState === 'listening' ? 'text-primary' : 'text-on-primary'}`} style={{fontVariationSettings: "'FILL' 1"}}>
+                  {voiceState === 'listening' ? 'stop' : 'mic'}
+                </span>
+              </button>
+            </div>
+            
+            {voiceState === 'listening' && (
+              <div className="flex items-end justify-center gap-1 h-16 w-full max-w-md opacity-60">
+                 {Array.from({length: 12}).map((_, i) => (
+                    <div key={i} className="waveform-bar" style={{ height: Math.max(4, Math.random() * (audioLevel * 100 + 10)) + 'px' }}></div>
+                 ))}
+              </div>
+            )}
+          </div>
 
-        {voiceState === 'idle' || voiceState === 'loading-models' ? (
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={startListening}
-            disabled={voiceState === 'loading-models'}
-          >
-            Start Listening
-          </button>
-        ) : voiceState === 'listening' ? (
-          <button className="btn btn-lg" onClick={stopListening}>
-            Stop
-          </button>
-        ) : null}
+          <p className="text-on-surface-variant max-w-md mx-auto text-lg leading-relaxed relative z-10">
+             {voiceState === 'idle' && 'Tap to start recording. Our AI will transcribe, clean, and summarize your thoughts in real-time.'}
+             {voiceState === 'loading-models' && 'Loading engine modules...'}
+             {voiceState === 'processing' && 'Extracting semantic structure...'}
+             {voiceState === 'speaking' && 'Audio output synthesis...'}
+          </p>
+        </section>
+
+        {(transcript || response) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start relative z-10">
+            {transcript && (
+              <div className="bg-surface-container-highest rounded-2xl p-8 min-h-[400px] flex flex-col border border-outline-variant/10 shadow-lg">
+                 <div className="flex items-center justify-between mb-8">
+                   <div className="flex items-center gap-3">
+                     <span className="material-symbols-outlined text-primary">notes</span>
+                     <h3 className="text-xl font-bold text-on-surface">Live Transcript</h3>
+                   </div>
+                 </div>
+                 <div className="flex-1 overflow-y-auto pr-4 space-y-6 custom-scrollbar text-on-surface">
+                   <p className="leading-relaxed text-sm">{transcript}</p>
+                 </div>
+              </div>
+            )}
+
+            {response && (
+              <div className="bg-surface-container-lowest rounded-2xl p-8 min-h-[400px] flex flex-col border border-primary/20 shadow-lg shadow-primary/5">
+                 <div className="flex items-center justify-between mb-8">
+                   <div className="flex items-center gap-3">
+                     <span className="material-symbols-outlined text-primary">auto_awesome</span>
+                     <h3 className="text-xl font-bold text-on-surface">AI Extraction</h3>
+                   </div>
+                 </div>
+                 <div className="flex-1 overflow-y-auto pr-4 space-y-6 custom-scrollbar text-on-surface">
+                   <p className="leading-relaxed text-sm italic border-l-2 border-primary/40 pl-4">{response}</p>
+                 </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-
-      {transcript && (
-        <div className="voice-transcript">
-          <h4>You said:</h4>
-          <p>{transcript}</p>
-        </div>
-      )}
-
-      {response && (
-        <div className="voice-response">
-          <h4>AI response:</h4>
-          <p>{response}</p>
-        </div>
-      )}
     </div>
   );
 }

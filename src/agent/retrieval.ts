@@ -49,10 +49,12 @@ async function searchWikipedia(query: string, maxResults = 3): Promise<Retrieved
       }),
     );
 
-    return summaries
-      .filter((r): r is PromiseFulfilledResult<RetrievedSource | null> => r.status === 'fulfilled')
-      .map((r) => r.value)
-      .filter((v): v is RetrievedSource => v !== null);
+    return summaries.reduce<RetrievedSource[]>((acc, r) => {
+      if (r.status === 'fulfilled' && r.value !== null) {
+        acc.push(r.value);
+      }
+      return acc;
+    }, []);
   } catch {
     return [];
   }

@@ -195,73 +195,142 @@ export function VisionTab() {
   // Render
   // ------------------------------------------------------------------
   return (
-    <div className="tab-panel vision-panel">
+    <div className="flex-1 flex flex-col p-4 md:p-8 bg-surface space-y-6 overflow-y-auto custom-scrollbar h-full relative">
       <ModelBanner
         state={loader.state}
         progress={loader.progress}
         error={loader.error}
         onLoad={loader.ensure}
-        label="VLM"
+        label="Vision Engine (VLM)"
       />
 
-      <div className="vision-camera">
-        {!cameraActive && (
-          <div className="empty-state">
-            <h3>📷 Camera Preview</h3>
-            <p>Tap below to start the camera</p>
-          </div>
-        )}
-        <div ref={videoMountRef} />
-      </div>
+      <div className="flex flex-col md:flex-row gap-6 h-full min-h-[500px]">
+        {/* Left Side: Camera Preview */}
+        <div className="w-full md:w-1/2 flex flex-col gap-4">
+           <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-outline tracking-widest uppercase flex items-center gap-2">
+                 <span className="material-symbols-outlined text-sm">visibility</span>
+                 Optical Sensor
+              </h3>
+              {liveMode && (
+                 <span className="flex items-center gap-2 text-[10px] font-bold text-error uppercase tracking-widest bg-error/10 px-2 py-1 rounded-sm border border-error/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-error animate-pulse"></span>
+                    Live Feed
+                 </span>
+              )}
+           </div>
+           
+           <div className="relative flex-1 bg-surface-container-low rounded-2xl overflow-hidden shadow-inner border border-outline-variant/10 flex items-center justify-center min-h-[300px]">
+              {!cameraActive && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-outline-variant/50 p-6 text-center z-10">
+                  <span className="material-symbols-outlined text-6xl mb-4">videocam_off</span>
+                  <p className="text-sm font-medium mb-1 text-on-surface">Sensor Offline</p>
+                  <p className="text-xs">Initialize camera to begin visual processing</p>
+                </div>
+              )}
+              {/* The video element gets appended here by the cam reference */}
+              <div ref={videoMountRef} className="absolute inset-0 w-full h-full object-cover z-0" style={{borderRadius: 0}} />
+              
+              {/* Scanner effect when parsing */}
+              {processing && (
+                 <div className="absolute top-0 left-0 w-full h-1 bg-primary/80 shadow-[0_0_15px_rgba(210,197,179,0.5)] z-20 animate-[scan_2s_ease-in-out_infinite]"></div>
+              )}
+           </div>
 
-      <input
-        className="vision-prompt"
-        type="text"
-        placeholder="What do you want to know about the image?"
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        disabled={liveMode}
-      />
+           {error && (
+             <div className="bg-error/10 border border-error/20 p-3 rounded-xl flex items-start gap-3">
+               <span className="material-symbols-outlined text-error text-lg mt-0.5">error</span>
+               <span className="text-xs text-error leading-relaxed">{error}</span>
+             </div>
+           )}
 
-      <div className="vision-actions">
-        {!cameraActive ? (
-          <button className="btn btn-primary" onClick={startCamera}>Start Camera</button>
-        ) : (
-          <>
-            <button
-              className="btn btn-primary"
-              onClick={describeSingle}
-              disabled={processing || liveMode}
-            >
-              {processing && !liveMode ? 'Analyzing...' : 'Describe'}
-            </button>
-            <button
-              className={`btn ${liveMode ? 'btn-live-active' : ''}`}
-              onClick={toggleLive}
-              disabled={processing && !liveMode}
-            >
-              {liveMode ? '⏹ Stop Live' : '▶ Live'}
-            </button>
-          </>
-        )}
-      </div>
-
-      {error && (
-        <div className="vision-result">
-          <span className="error-text">Error: {error}</span>
+           <div className="flex gap-2">
+              {!cameraActive ? (
+                <button 
+                  className="flex-1 bg-gradient-to-br from-primary to-primary-container text-on-primary py-3 rounded-xl text-xs font-bold tracking-widest uppercase shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all flex items-center justify-center gap-2" 
+                  onClick={startCamera}
+                >
+                  <span className="material-symbols-outlined text-[18px]">power_settings_new</span>
+                  Initialize Sensor
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="flex-1 bg-primary text-on-primary py-3 rounded-xl text-xs font-bold tracking-widest uppercase shadow-lg shadow-primary/10 hover:shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    onClick={describeSingle}
+                    disabled={processing || liveMode}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{processing && !liveMode ? 'sync' : 'center_focus_strong'}</span>
+                    {processing && !liveMode ? 'Analyzing...' : 'Snapshot Analysis'}
+                  </button>
+                  <button
+                    className={`flex-1 py-3 rounded-xl text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 border ${
+                      liveMode 
+                        ? 'bg-error/20 text-error border-error/30 hover:bg-error/30' 
+                        : 'bg-surface-variant text-on-surface border-outline-variant/20 hover:border-primary/40 hover:text-primary'
+                    }`}
+                    onClick={toggleLive}
+                    disabled={processing && !liveMode}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{liveMode ? 'stop_circle' : 'stream'}</span>
+                    {liveMode ? 'Halt Live' : 'Continuous Mode'}
+                  </button>
+                </>
+              )}
+           </div>
         </div>
-      )}
 
-      {result && (
-        <div className="vision-result">
-          {liveMode && <span className="live-badge">LIVE</span>}
-          <h4>Result</h4>
-          <p>{result.text}</p>
-          {result.totalMs > 0 && (
-            <div className="message-stats">{(result.totalMs / 1000).toFixed(1)}s</div>
-          )}
+        {/* Right Side: Operations and Output */}
+        <div className="w-full md:w-1/2 flex flex-col gap-4">
+           <h3 className="text-sm font-bold text-outline tracking-widest uppercase flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">settings_input_component</span>
+              Process Parameters
+           </h3>
+           
+           <div className="bg-surface-container-high rounded-xl p-1 shadow-inner border border-outline-variant/10">
+              <input
+                className="w-full bg-transparent border-none p-3 text-sm text-on-surface focus:ring-0 outline-none placeholder:text-outline-variant/50"
+                type="text"
+                placeholder="Directive details (e.g. 'Identify text visible in this frame')"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                disabled={liveMode}
+              />
+           </div>
+
+           <h3 className="text-sm font-bold text-outline tracking-widest uppercase flex items-center gap-2 mt-4">
+              <span className="material-symbols-outlined text-sm">data_object</span>
+              Engine Output
+           </h3>
+
+           <div className="flex-1 bg-[#161c25] rounded-2xl p-6 border border-outline-variant/10 overflow-y-auto custom-scrollbar shadow-inner relative">
+              {!result && !processing && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center opacity-30 pointer-events-none p-6 text-center">
+                    <span className="material-symbols-outlined text-4xl mb-4 text-primary">analytics</span>
+                    <p className="text-xs font-mono">Awaiting optical data</p>
+                 </div>
+              )}
+              
+              {result && (
+                <div className="relative z-10 flex flex-col h-full">
+                  <div className="flex-1 text-sm text-on-surface leading-loose whitespace-pre-wrap">
+                    {result.text}
+                  </div>
+                  
+                  {result.totalMs > 0 && (
+                    <div className="mt-6 pt-4 border-t border-outline-variant/10 flex items-center justify-between text-[10px] font-mono text-outline-variant uppercase tracking-widest">
+                      <span className="flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-secondary rounded-full"></span>
+                        Status: Complete
+                      </span>
+                      <span>Latency: {(result.totalMs / 1000).toFixed(1)}s</span>
+                    </div>
+                  )}
+                </div>
+              )}
+           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
