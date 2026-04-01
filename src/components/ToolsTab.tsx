@@ -6,6 +6,7 @@ import {
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
+import { ModelManagerPanel } from './ModelManagerPanel';
 
 // ── Demo tools ──
 const DEMO_TOOLS: { def: ToolDefinition; executor: Parameters<typeof ToolCalling.registerTool>[1] }[] = [
@@ -46,8 +47,11 @@ interface TraceStep { type: 'user' | 'tool_call' | 'tool_result' | 'response'; c
 interface ParamDraft { name: string; type: 'string' | 'number' | 'boolean'; description: string; required: boolean; }
 const EMPTY_PARAM: ParamDraft = { name: '', type: 'string', description: '', required: true };
 
+type ToolSubView = 'pipeline' | 'models';
+
 export function ToolsTab() {
   const loader = useModelLoader(ModelCategory.Language);
+  const [subView, setSubView] = useState<ToolSubView>('pipeline');
   const [input, setInput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [autoExecute, setAutoExecute] = useState(true);
@@ -118,6 +122,31 @@ export function ToolsTab() {
 
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 space-y-6 overflow-y-auto custom-scrollbar relative h-full">
+      {/* Sub-view tabs */}
+      <div className="flex gap-2 shrink-0">
+        <button
+          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${subView === 'pipeline' ? 'btn-primary' : 'glass-panel'}`}
+          style={subView !== 'pipeline' ? { color: 'var(--text-secondary)' } : {}}
+          onClick={() => setSubView('pipeline')}
+        >
+          <span className="material-symbols-outlined align-middle mr-1 text-sm">deployed_code</span>
+          Tool Pipeline
+        </button>
+        <button
+          className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${subView === 'models' ? 'btn-primary' : 'glass-panel'}`}
+          style={subView !== 'models' ? { color: 'var(--text-secondary)' } : {}}
+          onClick={() => setSubView('models')}
+        >
+          <span className="material-symbols-outlined align-middle mr-1 text-sm">model_training</span>
+          Model Manager
+        </button>
+      </div>
+
+      {/* Model Manager view */}
+      {subView === 'models' && <ModelManagerPanel />}
+
+      {/* Tool Pipeline view */}
+      {subView === 'pipeline' && <>
       <ModelBanner state={loader.state} progress={loader.progress} error={loader.error} onLoad={loader.ensure} label="LLM Tool Execution" />
 
       {/* Toolbar */}
@@ -300,6 +329,7 @@ export function ToolsTab() {
           </div>
         </div>
       </div>
+      </>}
     </div>
   );
 }

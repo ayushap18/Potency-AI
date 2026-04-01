@@ -66,7 +66,12 @@ function MarkdownContent({ text }: { text: string }) {
 }
 
 // ── Main component ──
-export function AgentTab() {
+interface AgentTabProps {
+  onBrainLog?: (msg: string) => void;
+  onAgentStatus?: (agent: string, status: 'idle' | 'running' | 'done' | 'error') => void;
+}
+
+export function AgentTab({ onBrainLog, onAgentStatus }: AgentTabProps = {}) {
   const loader = useModelLoader(ModelCategory.Language);
 
   const [query, setQuery] = useState('');
@@ -105,16 +110,54 @@ export function AgentTab() {
     }
     reset();
     setRunning(true);
+    
+    // Create new abort controller for this run
+    const controller = new AbortController();
+    abortRef.current = controller;
+    
+    // Map pipeline stages to agent brain cards
+    const stageToAgent: Record<PipelineStageId, string> = {
+      intent: 'classifier', planning: 'planner', retrieval: 'retriever',
+      analysis: 'analyst', synthesis: 'writer', followup: 'writer',
+    };
+
+    onBrainLog?.(`[QUERY] ${query.trim().slice(0, 80)}`);
+
     await runResearchAgent(query.trim(), {
-      onStageUpdate: ({ stage, status, detail }) => {
+      onStageUpdate: ({ stage, status, detail, warning }) => {
         setStageStatuses((prev) => ({ ...prev, [stage]: status }));
         if (detail) setStageDetails((prev) => ({ ...prev, [stage]: detail }));
+        if (warning) console.warn(`[${stage}] ${warning}`);
+
+        // Feed brain sidebar
+        const agent = stageToAgent[stage];
+        if (status === 'running') {
+          onAgentStatus?.(agent, 'running');
+          onBrainLog?.(`[${agent.toUpperCase()}] ${detail || STAGES.find(s => s.id === stage)?.description || 'working…'}`);
+        } else if (status === 'done') {
+          onAgentStatus?.(agent, 'done');
+          onBrainLog?.(`[${agent.toUpperCase()}] ✓ ${detail || 'complete'}`);
+        } else if (status === 'error' || status === 'partial') {
+          if (status === 'error') onAgentStatus?.(agent, 'error');
+          if (warning) onBrainLog?.(`[${agent.toUpperCase()}] ⚠ ${warning}`);
+        }
       },
       onToken: (token) => setStreamText((t) => t + token),
-      onComplete: (r) => { setResult(r); setStreamText(''); setRunning(false); },
+      onComplete: (r) => {
+        setResult(r);
+        setStreamText('');
+        setRunning(false);
+        abortRef.current = null;
+        onBrainLog?.(`[DONE] Report generated in ${(r.elapsedMs / 1000).toFixed(1)}s — ${r.sources.length} sources`);
+        // Reset all agents to idle
+        for (const a of Object.values(stageToAgent)) onAgentStatus?.(a, 'idle');
+      },
       onError: (msg) => {
         setError(msg);
         setRunning(false);
+        abortRef.current = null;
+        onBrainLog?.(`[ERROR] ${msg}`);
+        for (const a of Object.values(stageToAgent)) onAgentStatus?.(a, 'error');
         setStageStatuses((prev) => {
           const next = { ...prev };
           for (const k of Object.keys(next) as PipelineStageId[]) {
@@ -123,10 +166,14 @@ export function AgentTab() {
           return next;
         });
       },
-    });
+    }, { signal: controller.signal });
   }, [query, running, loader]);
 
-  const stop = () => { abortRef.current?.abort(); setRunning(false); };
+  const stop = () => { 
+    abortRef.current?.abort(); 
+    abortRef.current = null;
+    setRunning(false); 
+  };
 
   const showPipeline = running || result !== null || error !== null;
   const showStream = running && streamText.length > 0;
@@ -216,6 +263,8 @@ export function AgentTab() {
                       <span className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
                     ) : status === 'done' ? (
                       <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1", color: '#34d399' }}>check_circle</span>
+                    ) : status === 'partial' ? (
+                      <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1", color: '#fbbf24' }}>warning</span>
                     ) : status === 'error' ? (
                       <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1", color: '#f87171' }}>cancel</span>
                     ) : (

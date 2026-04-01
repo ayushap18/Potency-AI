@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ModelCategory } from '@runanywhere/web';
+import { ModelCategory, ModelManager } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
@@ -76,6 +76,32 @@ export function ChatTab() {
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 space-y-6 h-full relative">
       <ModelBanner state={loader.state} progress={loader.progress} error={loader.error} onLoad={loader.ensure} label="LLM Engine" />
+
+      {/* Chat controls */}
+      {messages.length > 0 && !generating && (
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
+            {(() => {
+              const loaded = ModelManager.getLoadedModel(ModelCategory.Language);
+              return loaded ? (
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--success)' }} />
+                  {loaded.name}
+                </span>
+              ) : null;
+            })()}
+            <span>{messages.filter(m => m.role === 'user').length} messages</span>
+          </div>
+          <button
+            className="glass-panel px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1"
+            style={{ color: 'var(--text-muted)' }}
+            onClick={() => setMessages([])}
+          >
+            <span className="material-symbols-outlined text-sm">delete_sweep</span>
+            Clear
+          </button>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-6" ref={listRef}>
         {messages.length === 0 && (

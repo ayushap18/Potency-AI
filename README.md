@@ -8,7 +8,7 @@ Recently rebuilt with the custom **"Stitch" Obsidian Alchemist Design System** u
 
 | Tool | Capability |
 |-----|-------------|
-| **Code Assistant (Agent)** | A state-of-the-art Local Research Agent pipeline supporting recursive tool-calling schemas and intermediate reasoning (using LFM2 350M/1.7B). |
+| **Code Assistant (Agent)** | A state-of-the-art Local Research Agent pipeline supporting recursive tool-calling schemas and intermediate reasoning (using LFM2 1.2B Tool). |
 | **Notes (Chat)** | A seamless, streaming markdown chat interface for pure textual interaction with live token metrics. |
 | **Speech to Text (Voice)** | Speak naturally—utilizes real-time Voice Activity Detection (VAD) coupled with Whisper to transcribe continuously, generating AI responses and running Text-to-Speech (TTS) back to you. |
 | **Vision** | Grant the AI optical access to your camera to describe and analyze your environment using LFM2-VL (Vision Language Model). |
@@ -36,7 +36,11 @@ The UI now uses native statically-compiled **Tailwind CSS v4** (`@tailwindcss/po
 * **Colors:** Deep charcoal surfaces `var(--color-surface-dim)`, paired with rusted metallic glowing accents like `var(--color-primary)`.
 
 ### Local Agent Iteration
-Inside `src/agent/localAgent.ts`, we now wrap the underlying SDK's generation features in a robust class. The agent safely handles recursive iterations for function schemas (like searching the web, analyzing documents) before finalizing answers to the user UI.
+Inside `src/agent/agent.ts`, we wrap the underlying SDK's generation features in a robust orchestrator class. The agent safely handles:
+- **Abort signal support** for cancellable operations
+- **Retry logic** with exponential backoff for JSON parsing
+- **Graceful degradation** with partial success reporting
+- **Semantic context truncation** at sentence boundaries
 
 ## 📂 Project Structure
 
@@ -46,14 +50,16 @@ src/
 ├── App.tsx               # App Shell (Sidebar layout & Router)
 ├── runanywhere.ts        # SDK initialization & OPFS Model definitions
 ├── agent/
-│   ├── localLLM.ts       # Standalone generation helpers
-│   └── localAgent.ts     # The recursive tool-calling agent framework
+│   ├── localLLM.ts       # Standalone generation helpers with retry logic
+│   ├── agent.ts          # The recursive tool-calling agent framework
+│   ├── prompts.ts        # Prompt templates for agent stages
+│   └── retrieval.ts      # Wikipedia retrieval with abort support
 ├── workers/
 │   └── vlm-worker.ts     # Dedicated VLM execution thread
 ├── components/
 │   ├── AgentTab.tsx      # The Code Assistant interface
 │   ├── ChatTab.tsx       # Standard Notes/Chat 
-│   ├── VisionTab.tsx     # Camera Optical analyzer
+│   ├── VisionTab.tsx     # Camera Optical analyzer with crash recovery
 │   ├── VoiceTab.tsx      # Advanced speech node processing
 │   ├── ToolsTab.tsx      # Multi-step pipeline tracer (Learn)
 │   └── ModelBanner.tsx   # Floating OPFS download indicator

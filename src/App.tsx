@@ -562,7 +562,7 @@ export function App() {
         {/* ── Main Content ── */}
         <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
           <div style={{ display: activeView === 'agent' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}>
-            <AgentTab />
+            <AgentTab onBrainLog={pushBrainLog} onAgentStatus={updateAgentStatus} />
           </div>
           <div style={{ display: activeView === 'chat'   ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><ChatTab /></div>
           <div style={{ display: activeView === 'voice'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VoiceTab /></div>
