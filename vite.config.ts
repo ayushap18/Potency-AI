@@ -68,6 +68,9 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'credentialless',
     },
+    // Suppress "Sourcemap points to missing source files" warnings from @runanywhere
+    // packages — their .map files reference TypeScript sources not shipped in the bundle.
+    sourcemapIgnoreList: (sourcePath) => sourcePath.includes('node_modules'),
   },
   assetsInclude: ['**/*.wasm'],
   worker: { format: 'es' },
