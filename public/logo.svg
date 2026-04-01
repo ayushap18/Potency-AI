@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0f1e"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="100" y1="100" x2="412" y2="412" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff6b2b"/>
+      <stop offset="50%" stop-color="#ff4500"/>
+      <stop offset="100%" stop-color="#e03e00"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="256" y1="80" x2="256" y2="432" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff6b2b" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ff4500" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="blur1" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <filter id="blur2" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+
+  <!-- Outer glow ring -->
+  <circle cx="256" cy="240" r="155" fill="none" stroke="url(#glow)" stroke-width="40" filter="url(#blur1)"/>
+
+  <!-- Neural network connections (background lines) -->
+  <g stroke="#ff450020" stroke-width="1.5">
+    <line x1="160" y1="180" x2="256" y2="140"/>
+    <line x1="352" y1="180" x2="256" y2="140"/>
+    <line x1="160" y1="180" x2="200" y2="280"/>
+    <line x1="352" y1="180" x2="312" y2="280"/>
+    <line x1="200" y1="280" x2="256" y2="340"/>
+    <line x1="312" y1="280" x2="256" y2="340"/>
+    <line x1="200" y1="280" x2="312" y2="280"/>
+    <line x1="160" y1="180" x2="352" y2="180"/>
+  </g>
+
+  <!-- Brain / neural shape — stylized "P" merged with circuit -->
+  <!-- Hexagonal core -->
+  <path d="M256 120 L330 165 L330 255 L256 300 L182 255 L182 165 Z"
+        fill="none" stroke="url(#accent)" stroke-width="3" stroke-linejoin="round" opacity="0.4"/>
+
+  <!-- Inner energy core -->
+  <circle cx="256" cy="210" r="42" fill="url(#accent)" opacity="0.12"/>
+  <circle cx="256" cy="210" r="42" fill="none" stroke="url(#accent)" stroke-width="2.5"/>
+
+  <!-- "P" letterform — bold geometric -->
+  <path d="M232 175 L232 260 M232 175 L272 175 Q292 175 292 195 Q292 215 272 215 L232 215"
+        fill="none" stroke="url(#accent)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Neural dots at vertices -->
+  <g fill="url(#accent)">
+    <circle cx="256" cy="140" r="5"/>
+    <circle cx="160" cy="180" r="4" opacity="0.6"/>
+    <circle cx="352" cy="180" r="4" opacity="0.6"/>
+    <circle cx="200" cy="280" r="4" opacity="0.5"/>
+    <circle cx="312" cy="280" r="4" opacity="0.5"/>
+    <circle cx="256" cy="340" r="3.5" opacity="0.4"/>
+  </g>
+
+  <!-- Pulse rings -->
+  <circle cx="256" cy="210" r="65" fill="none" stroke="#ff4500" stroke-width="1" opacity="0.15"/>
+  <circle cx="256" cy="210" r="90" fill="none" stroke="#ff4500" stroke-width="0.75" opacity="0.08"/>
+
+  <!-- Accent dot — top right spark -->
+  <circle cx="310" cy="148" r="3" fill="#ff6b2b" filter="url(#blur2)"/>
+  <circle cx="310" cy="148" r="1.5" fill="#fff"/>
+
+  <!-- Text: POTENCY AI -->
+  <text x="256" y="400" text-anchor="middle" font-family="'SF Pro Display', 'Inter', system-ui, sans-serif" font-weight="800" font-size="52" letter-spacing="6" fill="white">POTENCY</text>
+  <text x="256" y="445" text-anchor="middle" font-family="'SF Mono', 'JetBrains Mono', monospace" font-weight="600" font-size="24" letter-spacing="14" fill="url(#accent)">A I</text>
+
+  <!-- Subtle bottom line -->
+  <line x1="180" y1="462" x2="332" y2="462" stroke="url(#accent)" stroke-width="1" opacity="0.2"/>
+</svg>
