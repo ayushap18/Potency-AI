@@ -1,40 +1,18 @@
 /**
  * App.tsx — Potency AI Glassmorphism Shell
  *
- * Sidebar nav + top header + main content area + CursorGrid background.
- * All original SDK init logic and component logic preserved.
+ * Unified chat interface + Claude-style sidebar + CursorGrid background.
+ * All original SDK init logic preserved.
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { initSDK, getAccelerationMode } from './runanywhere';
-import { AgentTab }  from './components/AgentTab';
-import { ChatTab }   from './components/ChatTab';
-import { VoiceTab }  from './components/VoiceTab';
-import { VisionTab } from './components/VisionTab';
-import { ToolsTab }  from './components/ToolsTab';
+import { UnifiedChat } from './components/UnifiedChat';
+import { ToolsTab } from './components/ToolsTab';
 import { CursorGrid } from './components/CursorGrid';
 import { useTheme, ACCENT_COLORS, type AccentColor, type ThemeMode, type BackgroundStyle } from './context/ThemeContext';
 
-// ── Types ──
-type ToolView = 'agent' | 'chat' | 'voice' | 'vision' | 'tools';
-
-const NAV_ITEMS: { id: ToolView; icon: string; label: string }[] = [
-  { id: 'agent',  icon: '🔬', label: 'Research'       },
-  { id: 'chat',   icon: '💬', label: 'Notes / Chat'   },
-  { id: 'voice',  icon: '🎙️', label: 'Speech to Text' },
-  { id: 'vision', icon: '📷', label: 'Vision'          },
-  { id: 'tools',  icon: '🔧', label: 'Tools'           },
-];
-
 // ── SVG Icon helpers ──
-function BrainIcon() {
-  return (
-    <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-    </svg>
-  );
-}
 function SettingsIcon() {
   return (
     <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,10 +22,11 @@ function SettingsIcon() {
     </svg>
   );
 }
-function HistoryIcon() {
+function BrainIcon() {
   return (
     <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
     </svg>
   );
 }
@@ -72,6 +51,38 @@ function MoonIcon() {
     </svg>
   );
 }
+function SidebarToggleIcon() {
+  // Panel toggle icon — two rectangles like the reference
+  return (
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="3" width="7" height="18" rx="1.5" />
+      <rect x="14" y="3" width="7" height="18" rx="1.5" />
+    </svg>
+  );
+}
+
+// ── Types ──
+type SidebarTab = 'chats' | 'tools';
+type AgentStatus = 'idle' | 'running' | 'done' | 'error';
+
+// ── Placeholder chat history ──
+const CHAT_HISTORY = {
+  today: [
+    { id: '1', title: 'Website redesign ideas' },
+    { id: '2', title: 'React component architecture' },
+    { id: '3', title: 'API integration guide' },
+  ],
+  yesterday: [
+    { id: '4', title: 'Database schema design' },
+    { id: '5', title: 'CSS animations tutorial' },
+  ],
+  previous: [
+    { id: '6', title: 'TypeScript best practices' },
+    { id: '7', title: 'Authentication with JWT' },
+    { id: '8', title: 'Deploy to Vercel guide' },
+    { id: '9', title: 'Python data analysis tips' },
+  ],
+};
 
 // ── Agent Brain Sidebar ──
 const AGENT_CARDS = [
@@ -82,27 +93,23 @@ const AGENT_CARDS = [
   { key: 'writer',     label: 'WRITE', title: 'Writer Agent'     },
 ];
 
-type AgentStatus = 'idle' | 'running' | 'done' | 'error';
-
 interface BrainSidebarProps {
   open: boolean;
   agentStatus: Record<string, AgentStatus>;
   brainLog: string[];
-  onToggle: () => void;
-  activeView: ToolView;
-  onViewChange: (v: ToolView) => void;
 }
 
-function BrainSidebar({ open, agentStatus, brainLog, activeView, onViewChange }: BrainSidebarProps) {
+function BrainSidebar({ open, agentStatus, brainLog }: BrainSidebarProps) {
   const anyActive = Object.values(agentStatus).some(s => s === 'running' || s === 'done');
+
+  if (!open) return null;
 
   return (
     <aside
       id="brain-panel"
-      className={`brain-sidebar flex-col flex-shrink-0 ${open ? 'lg:flex' : 'hidden'}`}
+      className="brain-sidebar flex-col flex-shrink-0 hidden lg:flex"
       style={{ width: 260, height: 'calc(100vh - 57px)', position: 'sticky', top: 57 }}
     >
-      {/* Agent Brain Header */}
       <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--glass-border)' }}>
         <div className="flex items-center gap-2">
           <div
@@ -112,30 +119,17 @@ function BrainSidebar({ open, agentStatus, brainLog, activeView, onViewChange }:
           />
           <span className="text-xs font-semibold tracking-widest font-mono" style={{ color: 'var(--text-muted)' }}>AGENT BRAIN</span>
         </div>
-        <button
-          onClick={() => { /* clear log */ }}
-          className="text-[10px] font-mono transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          CLEAR
-        </button>
       </div>
 
-      {/* Agent status cards */}
       <div className="p-3 grid grid-cols-5 gap-1" style={{ borderBottom: '1px solid var(--glass-border)' }}>
         {AGENT_CARDS.map((a) => (
-          <div
-            key={a.key}
-            className={`agent-card ${agentStatus[a.key] ?? 'idle'}`}
-            title={a.title}
-          >
+          <div key={a.key} className={`agent-card ${agentStatus[a.key] ?? 'idle'}`} title={a.title}>
             <div className="agent-icon">{a.label.charAt(0)}</div>
             <div className="agent-label">{a.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Brain feed */}
       <div id="brain-feed" className="flex-1 overflow-y-auto p-3 space-y-1" style={{ fontSize: 11 }}>
         {brainLog.length === 0 ? (
           <div className="text-center py-6" style={{ color: 'var(--text-muted)' }}>// waiting for query...</div>
@@ -144,12 +138,6 @@ function BrainSidebar({ open, agentStatus, brainLog, activeView, onViewChange }:
             <div key={i} className="brain-entry system px-1">{entry}</div>
           ))
         )}
-      </div>
-
-      {/* Watched Pages */}
-      <div className="flex-shrink-0 mx-3 mb-3 p-3 rounded-lg glass-panel">
-        <h4 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Watched Pages</h4>
-        <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>No pages being watched</p>
       </div>
     </aside>
   );
@@ -173,28 +161,20 @@ function SettingsPanel({ open, onClose, accel }: { open: boolean; onClose: () =>
           </div>
 
           <div className="space-y-6">
-            {/* ── Appearance ── */}
+            {/* Appearance */}
             <div className="glass-panel p-4">
               <h3 className="text-xs font-mono font-bold uppercase tracking-widest mb-4" style={{ color: 'var(--accent)' }}>Appearance</h3>
 
-              {/* Theme Mode */}
               <label className="settings-label">Theme</label>
               <div className="flex gap-2 mb-4">
-                <button
-                  onClick={() => setMode('light' as ThemeMode)}
-                  className={`theme-toggle-btn flex-1 ${mode === 'light' ? 'active' : ''}`}
-                >
+                <button onClick={() => setMode('light' as ThemeMode)} className={`theme-toggle-btn flex-1 ${mode === 'light' ? 'active' : ''}`}>
                   <SunIcon /> Light
                 </button>
-                <button
-                  onClick={() => setMode('dark' as ThemeMode)}
-                  className={`theme-toggle-btn flex-1 ${mode === 'dark' ? 'active' : ''}`}
-                >
+                <button onClick={() => setMode('dark' as ThemeMode)} className={`theme-toggle-btn flex-1 ${mode === 'dark' ? 'active' : ''}`}>
                   <MoonIcon /> Dark
                 </button>
               </div>
 
-              {/* Accent Color */}
               <label className="settings-label">Accent Color</label>
               <div className="flex gap-2 mb-4">
                 {(Object.keys(ACCENT_COLORS) as AccentColor[]).map((c) => (
@@ -208,25 +188,18 @@ function SettingsPanel({ open, onClose, accel }: { open: boolean; onClose: () =>
                 ))}
               </div>
 
-              {/* Background */}
               <label className="settings-label">Background</label>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setBackgroundStyle('grid' as BackgroundStyle)}
-                  className={`theme-toggle-btn flex-1 ${backgroundStyle === 'grid' ? 'active' : ''}`}
-                >
+                <button onClick={() => setBackgroundStyle('grid' as BackgroundStyle)} className={`theme-toggle-btn flex-1 ${backgroundStyle === 'grid' ? 'active' : ''}`}>
                   Grid
                 </button>
-                <button
-                  onClick={() => setBackgroundStyle('none' as BackgroundStyle)}
-                  className={`theme-toggle-btn flex-1 ${backgroundStyle === 'none' ? 'active' : ''}`}
-                >
+                <button onClick={() => setBackgroundStyle('none' as BackgroundStyle)} className={`theme-toggle-btn flex-1 ${backgroundStyle === 'none' ? 'active' : ''}`}>
                   None
                 </button>
               </div>
             </div>
 
-            {/* ── System Info ── */}
+            {/* System Info */}
             <div>
               <label className="settings-label">Acceleration</label>
               <div className="settings-value">{accel ?? 'Detecting...'}</div>
@@ -236,47 +209,10 @@ function SettingsPanel({ open, onClose, accel }: { open: boolean; onClose: () =>
               <div className="settings-value font-mono text-[11px]">100% Local · WASM · No API Key</div>
             </div>
             <div>
-              <label className="settings-label">Semantic Reranker</label>
-              <div className="flex items-center gap-2 mt-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--success)' }} />
-                <span className="text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>BAAI/bge-small-en-v1.5</span>
-              </div>
-              <p className="text-[10px] mt-1 font-mono" style={{ color: 'var(--text-muted)' }}>local · cosine similarity reranking</p>
-            </div>
-            <div>
-              <label className="settings-label">Research Modes</label>
-              <div className="space-y-1 mt-1 text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>
-                <div><span style={{ color: 'var(--accent)' }}>AUTO</span> — agent decides depth</div>
-                <div><span style={{ color: 'var(--text-secondary)' }}>QUICK</span> — fast / fewer sources</div>
-                <div><span style={{ color: 'var(--text-muted)' }}>DEEP</span> — thorough / more sources</div>
-              </div>
-            </div>
-            <div>
               <label className="settings-label">Privacy</label>
               <div className="settings-value text-[11px]" style={{ color: 'var(--success)' }}>No data leaves your device</div>
             </div>
           </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ── History Panel ──
-function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
-  return (
-    <>
-      {open && <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" onClick={onClose} />}
-      <div
-        className={`side-panel fixed inset-y-0 right-0 z-50 overflow-y-auto transition-transform duration-300 ${open ? 'translate-x-0' : 'translate-x-full'}`}
-        style={{ width: 360 }}
-      >
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="font-semibold font-mono tracking-wider text-sm" style={{ color: 'var(--text-primary)' }}>HISTORY</h2>
-            <button onClick={onClose} className="icon-btn"><CloseIcon /></button>
-          </div>
-          <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>// no history yet</p>
         </div>
       </div>
     </>
@@ -290,12 +226,12 @@ export function App() {
   const [sdkError,  setSdkError]  = useState<string | null>(null);
   const [accel,     setAccel]     = useState<string | null>(null);
 
-  // Shell UI state
+  // Shell state
   const [brainOpen,    setBrainOpen]    = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [historyOpen,  setHistoryOpen]  = useState(false);
-  const [activeView,   setActiveView]   = useState<ToolView>('agent');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Brain sidebar data
   const [agentStatus, setAgentStatus] = useState<Record<string, AgentStatus>>({
@@ -380,9 +316,12 @@ export function App() {
     );
   }
 
+  // Filter chat history
+  const filterHistory = (items: { id: string; title: string }[]) =>
+    searchQuery ? items.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase())) : items;
+
   return (
     <div className="min-h-screen antialiased overflow-x-hidden flex flex-col" style={{ color: 'var(--text-primary)' }}>
-      {/* ── Background ── */}
       <CursorGrid />
 
       {/* ══════════════ HEADER ══════════════ */}
@@ -407,6 +346,16 @@ export function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
+            {/* Sidebar open button (when collapsed on desktop) */}
+            {sidebarCollapsed && (
+              <button
+                className="hidden lg:flex header-btn mr-1"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Open sidebar"
+              >
+                <SidebarToggleIcon />
+              </button>
+            )}
             <div
               className="w-9 h-9 rounded-xl ax-logo flex items-center justify-center font-bold text-sm tracking-wide"
             >
@@ -451,22 +400,13 @@ export function App() {
               <BrainIcon />
             </button>
 
-            {/* Settings */}
+            {/* Settings (single icon on the right) */}
             <button
-              onClick={() => { setSettingsOpen(o => !o); setHistoryOpen(false); }}
+              onClick={() => setSettingsOpen(o => !o)}
               className="header-btn"
               title="Settings"
             >
               <SettingsIcon />
-            </button>
-
-            {/* History */}
-            <button
-              onClick={() => { setHistoryOpen(o => !o); setSettingsOpen(false); }}
-              className="header-btn"
-              title="History"
-            >
-              <HistoryIcon />
             </button>
           </div>
         </div>
@@ -475,11 +415,11 @@ export function App() {
       {/* ══════════════ MAIN LAYOUT ══════════════ */}
       <div className="relative z-10 flex flex-1" style={{ minHeight: 'calc(100vh - 57px)' }}>
 
-        {/* ── Left Sidebar Nav ── */}
+        {/* ── Left Sidebar — Claude-style ── */}
         <aside
-          className={`flex-shrink-0 flex-col hidden lg:flex ${sidebarCollapsed ? 'lg:hidden' : ''}`}
+          className={`flex-shrink-0 flex-col hidden lg:flex transition-all duration-300 ${sidebarCollapsed ? 'lg:hidden' : ''}`}
           style={{
-            width: 220,
+            width: 260,
             height: 'calc(100vh - 57px)',
             position: 'sticky',
             top: 57,
@@ -489,29 +429,112 @@ export function App() {
             borderRight: '1px solid var(--glass-border)',
           }}
         >
-          <div className="p-4 flex-1">
-            <div className="space-y-1 mt-2">
-              {NAV_ITEMS.map(nav => (
-                <button
-                  key={nav.id}
-                  onClick={() => setActiveView(nav.id)}
-                  className={`sidebar-nav-item ${activeView === nav.id ? 'active' : ''}`}
-                >
-                  <span className="text-lg">{nav.icon}</span>
-                  <span>{nav.label}</span>
-                </button>
-              ))}
+          {/* Sidebar header with close button */}
+          <div className="p-4 pb-2 flex items-center justify-between">
+            <button className="sidebar-new-chat-btn">
+              <span className="material-symbols-outlined text-base">edit_square</span>
+              <span>New chat</span>
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => setSidebarCollapsed(true)}
+              title="Close sidebar"
+            >
+              <SidebarToggleIcon />
+            </button>
+          </div>
+
+          {/* Tab switcher: Chats | Tools */}
+          <div className="px-4 py-2">
+            <div className="sidebar-tabs">
+              <button
+                className={`sidebar-tab ${sidebarTab === 'chats' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('chats')}
+              >
+                <span className="material-symbols-outlined text-sm">forum</span>
+                Chats
+              </button>
+              <button
+                className={`sidebar-tab ${sidebarTab === 'tools' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('tools')}
+              >
+                <span className="material-symbols-outlined text-sm">build</span>
+                Tools
+              </button>
             </div>
           </div>
 
-          {/* Bottom actions */}
-          <div className="p-4" style={{ borderTop: '1px solid var(--glass-border)' }}>
-            <button
-              onClick={() => { setSettingsOpen(true); setHistoryOpen(false); }}
-              className="sidebar-nav-item"
-            >
-              <SettingsIcon />
-              <span>Settings</span>
+          {/* Content based on tab */}
+          {sidebarTab === 'chats' ? (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Search */}
+              <div className="px-4 py-2">
+                <div className="sidebar-search">
+                  <span className="material-symbols-outlined text-sm" style={{ color: 'var(--text-muted)' }}>search</span>
+                  <input
+                    type="text"
+                    placeholder="Search chats..."
+                    className="sidebar-search-input"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Chat history */}
+              <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
+                {filterHistory(CHAT_HISTORY.today).length > 0 && (
+                  <div className="mb-4">
+                    <p className="sidebar-section-label">TODAY</p>
+                    {filterHistory(CHAT_HISTORY.today).map(chat => (
+                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
+                    ))}
+                  </div>
+                )}
+                {filterHistory(CHAT_HISTORY.yesterday).length > 0 && (
+                  <div className="mb-4">
+                    <p className="sidebar-section-label">YESTERDAY</p>
+                    {filterHistory(CHAT_HISTORY.yesterday).map(chat => (
+                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
+                    ))}
+                  </div>
+                )}
+                {filterHistory(CHAT_HISTORY.previous).length > 0 && (
+                  <div className="mb-4">
+                    <p className="sidebar-section-label">PREVIOUS 7 DAYS</p>
+                    {filterHistory(CHAT_HISTORY.previous).map(chat => (
+                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
+              <button className="sidebar-nav-item active">
+                <span className="material-symbols-outlined text-base">deployed_code</span>
+                <span>Tool Pipeline</span>
+              </button>
+              <button className="sidebar-nav-item">
+                <span className="material-symbols-outlined text-base">model_training</span>
+                <span>Model Manager</span>
+              </button>
+            </div>
+          )}
+
+          {/* Bottom — user info */}
+          <div className="p-4 flex items-center gap-3" style={{ borderTop: '1px solid var(--glass-border)' }}>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--glass-bg-strong)' }}>
+              <span className="material-symbols-outlined text-base" style={{ color: 'var(--accent)' }}>person</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>User</p>
+              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Free plan</p>
+            </div>
+            <button className="icon-btn" style={{ color: 'var(--text-muted)' }}>
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <circle cx="3" cy="8" r="1.5" /><circle cx="8" cy="8" r="1.5" /><circle cx="13" cy="8" r="1.5" />
+              </svg>
             </button>
           </div>
         </aside>
@@ -531,17 +554,15 @@ export function App() {
                 borderRight: '1px solid var(--glass-border)',
               }}
             >
-              <div className="p-4 flex-1">
-                <div className="space-y-1 mt-2">
-                  {NAV_ITEMS.map(nav => (
-                    <button
-                      key={nav.id}
-                      onClick={() => { setActiveView(nav.id); setSidebarCollapsed(false); }}
-                      className={`sidebar-nav-item ${activeView === nav.id ? 'active' : ''}`}
-                    >
-                      <span className="text-lg">{nav.icon}</span>
-                      <span>{nav.label}</span>
-                    </button>
+              <div className="p-4 flex-1 overflow-y-auto">
+                <button className="sidebar-new-chat-btn mb-4">
+                  <span className="material-symbols-outlined text-base">edit_square</span>
+                  <span>New chat</span>
+                </button>
+                <div className="mb-4">
+                  <p className="sidebar-section-label">TODAY</p>
+                  {CHAT_HISTORY.today.map(chat => (
+                    <button key={chat.id} className="sidebar-chat-item" onClick={() => setSidebarCollapsed(false)}>{chat.title}</button>
                   ))}
                 </div>
               </div>
@@ -554,26 +575,20 @@ export function App() {
           open={brainOpen}
           agentStatus={agentStatus}
           brainLog={brainLog}
-          onToggle={() => setBrainOpen(o => !o)}
-          activeView={activeView}
-          onViewChange={(v) => setActiveView(v)}
         />
 
         {/* ── Main Content ── */}
         <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
-          <div style={{ display: activeView === 'agent' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}>
-            <AgentTab onBrainLog={pushBrainLog} onAgentStatus={updateAgentStatus} />
-          </div>
-          <div style={{ display: activeView === 'chat'   ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><ChatTab /></div>
-          <div style={{ display: activeView === 'voice'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VoiceTab /></div>
-          <div style={{ display: activeView === 'vision' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VisionTab /></div>
-          <div style={{ display: activeView === 'tools'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><ToolsTab /></div>
+          {sidebarTab === 'tools' ? (
+            <ToolsTab />
+          ) : (
+            <UnifiedChat onBrainLog={pushBrainLog} onAgentStatus={updateAgentStatus} />
+          )}
         </main>
       </div>
 
       {/* ══════════════ SIDE PANELS ══════════════ */}
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} accel={accel} />
-      <HistoryPanel  open={historyOpen}  onClose={() => setHistoryOpen(false)} />
     </div>
   );
 }

@@ -1,8 +1,9 @@
 /**
  * CursorGrid.tsx — Chase AI-inspired cursor-tracking background
  * 
- * Renders a fixed grid pattern with a radial-gradient spotlight
- * that follows the cursor. Uses CSS mask-image for the effect.
+ * Renders a dense grid pattern (matching newgrid_2.1 / 2.2 reference images)
+ * with a tight radial-gradient spotlight that follows the cursor.
+ * The grid is barely visible by default and sharply illuminated only near the cursor.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -17,10 +18,11 @@ export function CursorGrid() {
   const updateSpotlight = useCallback(() => {
     if (spotlightRef.current) {
       const { x, y } = mouseRef.current;
-      spotlightRef.current.style.maskImage = 
-        `radial-gradient(280px circle at ${x}px ${y}px, black, transparent)`;
-      spotlightRef.current.style.webkitMaskImage = 
-        `radial-gradient(280px circle at ${x}px ${y}px, black, transparent)`;
+      // Tight, sharp spotlight — 180px hard circle, fading from 180-240px
+      spotlightRef.current.style.maskImage =
+        `radial-gradient(200px circle at ${x}px ${y}px, black 0%, black 60%, transparent 100%)`;
+      spotlightRef.current.style.webkitMaskImage =
+        `radial-gradient(200px circle at ${x}px ${y}px, black 0%, black 60%, transparent 100%)`;
     }
   }, []);
 
@@ -40,20 +42,30 @@ export function CursorGrid() {
 
   if (backgroundStyle === 'none') {
     return (
-      <div 
+      <div
         className="cursor-grid-container"
         style={{ background: 'var(--bg-primary)' }}
       />
     );
   }
 
-  const gridSize = 60;
+  // Dense grid matching the newgrid reference images (tighter spacing)
+  const gridSize = 28;
   const isDark = mode === 'dark';
+
+  // Grid line colors — matching the reference images
+  const gridLineColor = isDark
+    ? 'rgba(255, 255, 255, 0.18)'
+    : 'rgba(0, 0, 0, 0.15)';
+
+  const spotlightGridColor = isDark
+    ? 'rgba(255, 255, 255, 0.55)'
+    : 'rgba(0, 0, 0, 0.45)';
 
   return (
     <div className="cursor-grid-container">
       {/* Base background color */}
-      <div 
+      <div
         style={{
           position: 'absolute',
           inset: 0,
@@ -61,125 +73,36 @@ export function CursorGrid() {
         }}
       />
 
-      {/* Subtle base grid (always visible) */}
+      {/* Always-visible faint grid — nearly invisible, just barely perceptible */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
-          opacity: isDark ? 0.4 : 0.5,
+          opacity: isDark ? 0.25 : 0.3,
           backgroundImage: `
-            linear-gradient(var(--grid-color) 1px, transparent 1px),
-            linear-gradient(90deg, var(--grid-color) 1px, transparent 1px)
+            linear-gradient(${gridLineColor} 1px, transparent 1px),
+            linear-gradient(90deg, ${gridLineColor} 1px, transparent 1px)
           `,
           backgroundSize: `${gridSize}px ${gridSize}px`,
         }}
       />
 
-      {/* Cross marks at intersections (subtle) */}
-      <svg
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          opacity: isDark ? 0.25 : 0.3,
-        }}
-      >
-        <defs>
-          <pattern
-            id="cross-pattern"
-            width={gridSize}
-            height={gridSize}
-            patternUnits="userSpaceOnUse"
-          >
-            {/* Horizontal dash */}
-            <line
-              x1={gridSize / 2 - 4} y1={gridSize / 2}
-              x2={gridSize / 2 + 4} y2={gridSize / 2}
-              stroke={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'}
-              strokeWidth="0.8"
-            />
-            {/* Vertical dash */}
-            <line
-              x1={gridSize / 2} y1={gridSize / 2 - 4}
-              x2={gridSize / 2} y2={gridSize / 2 + 4}
-              stroke={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'}
-              strokeWidth="0.8"
-            />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#cross-pattern)" />
-      </svg>
-
-      {/* Bright spotlight layer — follows cursor */}
+      {/* Bright spotlight grid layer — follows cursor, sharp edge */}
       <div
         ref={spotlightRef}
         style={{
           position: 'absolute',
           inset: 0,
-          opacity: isDark ? 0.6 : 0.45,
+          opacity: isDark ? 0.85 : 0.75,
           backgroundImage: `
-            linear-gradient(var(--grid-dot) 1px, transparent 1px),
-            linear-gradient(90deg, var(--grid-dot) 1px, transparent 1px)
+            linear-gradient(${spotlightGridColor} 1px, transparent 1px),
+            linear-gradient(90deg, ${spotlightGridColor} 1px, transparent 1px)
           `,
           backgroundSize: `${gridSize}px ${gridSize}px`,
-          maskImage: 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
-          WebkitMaskImage: 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
+          maskImage: 'radial-gradient(200px circle at -9999px -9999px, black 0%, black 60%, transparent 100%)',
+          WebkitMaskImage: 'radial-gradient(200px circle at -9999px -9999px, black 0%, black 60%, transparent 100%)',
           transition: 'none',
           willChange: 'mask-image, -webkit-mask-image',
-        }}
-      />
-
-      {/* Spotlight cross marks — follows cursor */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          maskImage: spotlightRef.current?.style.maskImage || 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
-          WebkitMaskImage: spotlightRef.current?.style.webkitMaskImage || 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
-        }}
-      >
-        <svg
-          style={{
-            width: '100%',
-            height: '100%',
-            opacity: isDark ? 0.5 : 0.4,
-          }}
-        >
-          <use href="#cross-pattern" />
-          <rect width="100%" height="100%" fill="url(#cross-pattern)" />
-        </svg>
-      </div>
-
-      {/* Ambient glow blobs */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '-10%',
-          right: '-5%',
-          width: '35%',
-          height: '35%',
-          borderRadius: '50%',
-          background: isDark
-            ? 'radial-gradient(ellipse, rgba(255,255,255,0.02) 0%, transparent 70%)'
-            : 'radial-gradient(ellipse, rgba(0,0,0,0.02) 0%, transparent 70%)',
-          filter: 'blur(60px)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '-10%',
-          left: '-5%',
-          width: '30%',
-          height: '30%',
-          borderRadius: '50%',
-          background: isDark
-            ? 'radial-gradient(ellipse, rgba(255,255,255,0.015) 0%, transparent 70%)'
-            : 'radial-gradient(ellipse, rgba(0,0,0,0.015) 0%, transparent 70%)',
-          filter: 'blur(60px)',
-          pointerEvents: 'none',
         }}
       />
     </div>

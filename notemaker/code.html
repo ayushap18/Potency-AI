@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Potency - Note Maker</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-background": "#2b3437",
+              "on-secondary": "#f7f9ff",
+              "primary-fixed": "#e2dfff",
+              "surface-container": "#eaeff1",
+              "inverse-on-surface": "#9b9d9e",
+              "on-tertiary": "#f5f9ff",
+              "surface-tint": "#4d44e3",
+              "on-secondary-container": "#435368",
+              "primary-fixed-dim": "#d2d0ff",
+              "surface-container-highest": "#dbe4e7",
+              "on-surface-variant": "#586064",
+              "on-secondary-fixed": "#314055",
+              "outline": "#737c7f",
+              "inverse-primary": "#8582ff",
+              "surface": "#f8f9fa",
+              "on-tertiary-fixed": "#00121e",
+              "on-error-container": "#782232",
+              "secondary": "#506076",
+              "error-container": "#ff8b9a",
+              "surface-container-low": "#f1f4f6",
+              "on-primary-container": "#3f33d6",
+              "primary-dim": "#4034d7",
+              "error": "#9e3f4e",
+              "on-primary": "#faf6ff",
+              "inverse-surface": "#0c0f10",
+              "on-secondary-fixed-variant": "#4d5d73",
+              "on-surface": "#2b3437",
+              "surface-dim": "#d1dce0",
+              "tertiary-dim": "#005980",
+              "outline-variant": "#abb3b7",
+              "surface-container-high": "#e2e9ec",
+              "secondary-fixed-dim": "#c5d6f0",
+              "primary-container": "#e2dfff",
+              "tertiary-fixed": "#34b5fa",
+              "on-primary-fixed": "#2a13c5",
+              "on-primary-fixed-variant": "#4a40e0",
+              "on-tertiary-container": "#003047",
+              "secondary-container": "#d3e4fe",
+              "on-tertiary-fixed-variant": "#003954",
+              "surface-container-lowest": "#ffffff",
+              "error-dim": "#4f0116",
+              "surface-variant": "#dbe4e7",
+              "secondary-dim": "#44546a",
+              "surface-bright": "#f8f9fa",
+              "secondary-fixed": "#d3e4fe",
+              "on-error": "#fff7f7",
+              "tertiary": "#006592",
+              "tertiary-container": "#34b5fa",
+              "background": "#f8f9fa",
+              "primary": "#4d44e3",
+              "tertiary-fixed-dim": "#17a8ec"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            color: #2b3437;
+        }
+        h1, h2, h3, .font-headline {
+            font-family: 'Manrope', sans-serif;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+<!-- SideNavBar Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 flex flex-col bg-slate-50 dark:bg-slate-950 z-40">
+<div class="flex flex-col gap-y-2 p-6 h-full">
+<div class="flex items-center gap-3 mb-8">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div>
+<h2 class="text-xl font-bold text-slate-900 dark:text-white leading-tight">Potency</h2>
+<p class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">AI Productivity</p>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-xs font-semibold uppercase tracking-wider">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">code</span>
+<span class="text-xs font-semibold uppercase tracking-wider">Code Assistant</span>
+</a>
+<!-- Active Tab: Note Maker -->
+<a class="flex items-center gap-3 px-4 py-3 bg-white text-indigo-600 shadow-sm rounded-xl transition-all duration-200 ring-2 ring-indigo-500/20" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">edit_note</span>
+<span class="text-xs font-semibold uppercase tracking-wider">Note Maker</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">mic</span>
+<span class="text-xs font-semibold uppercase tracking-wider">Speech to Text</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">travel_explore</span>
+<span class="text-xs font-semibold uppercase tracking-wider">Research</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 flex flex-col gap-y-1">
+<button class="w-full py-3 px-4 mb-4 bg-primary text-on-primary rounded-xl font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined">add</span>
+<span>New Project</span>
+</button>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-sm">help</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">Help</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-xl transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-sm">logout</span>
+<span class="text-[11px] font-semibold uppercase tracking-wider">Logout</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- Main Canvas -->
+<main class="ml-64 min-h-screen bg-surface flex flex-col">
+<!-- TopAppBar -->
+<header class="sticky top-0 z-50 bg-white/80 backdrop-blur-xl flex justify-between items-center px-10 py-5 w-full shadow-[0px_12px_32px_rgba(43,52,55,0.06)]">
+<div class="flex items-center gap-6">
+<h1 class="text-2xl font-black text-slate-900 tracking-tighter">Note Maker</h1>
+<div class="h-6 w-[1px] bg-slate-200"></div>
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-full">
+<div class="w-2 h-2 rounded-full bg-tertiary-fixed animate-pulse"></div>
+<span class="text-xs font-medium text-on-surface-variant">Model: Llama 3.1 8b</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 mr-4">
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="flex items-center gap-3 pl-4 border-l border-slate-100">
+<div class="text-right">
+<p class="text-xs font-bold text-on-surface">Alex Rivera</p>
+<p class="text-[10px] text-on-surface-variant">Pro Plan</p>
+</div>
+<img alt="User Profile Avatar" class="w-9 h-9 rounded-full ring-2 ring-primary/10" data-alt="professional headshot of a person with friendly expression in minimalist studio lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDQN28CtAGNJFgOeb-bULaZwUtBVB3q6XC_L6XjELzFx6WksCikEnj1a4qi855XHm1czX-H8KKu4byJUh-JfAl78rbyydlPDDqZyvGWhm-gxYnI45-r4dVQ29WUQqEEogQjnvIz89T6ZR9GNVCPGVFf6R7ufjZ5PB7a6CVk6Heqmzhp2Pk4UfN8pLQIgnuR-MLJKW5t7b_Z55PwGNbFR7oS8MqiCO68WpOfu_YVftSTO1SDtvVVmqzPCbYlKdZ2QNQjdy7wz1UlmVsq"/>
+</div>
+</div>
+</header>
+<!-- Editor Content Area -->
+<div class="flex-1 px-10 py-8 flex gap-10">
+<!-- Main Workspace -->
+<section class="flex-1 flex flex-col gap-6">
+<!-- Formatting Toolbar -->
+<div class="bg-surface-container-lowest rounded-2xl p-2 flex items-center justify-between shadow-[0px_12px_32px_rgba(43,52,55,0.03)] border border-white">
+<div class="flex items-center gap-1">
+<button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">format_bold</span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">format_italic</span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">format_list_bulleted</span>
+</button>
+<div class="w-px h-6 bg-surface-container-high mx-1"></div>
+<button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">link</span>
+</button>
+<button class="p-2 hover:bg-surface-container-low rounded-lg transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">image</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-semibold hover:bg-primary/15 transition-colors">
+<span class="material-symbols-outlined text-sm">auto_awesome</span>
+<span>Draft Email</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-xs font-semibold hover:bg-primary/15 transition-colors">
+<span class="material-symbols-outlined text-sm">summarize</span>
+<span>Summarize</span>
+</button>
+<div class="w-px h-6 bg-surface-container-high mx-1"></div>
+<button class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+<span class="material-symbols-outlined">save</span>
+</button>
+</div>
+</div>
+<!-- Editor Surface -->
+<div class="flex-1 bg-surface-container-lowest rounded-3xl p-16 shadow-[0px_24px_48px_rgba(43,52,55,0.04)] min-h-[700px]">
+<input class="w-full text-4xl font-headline font-bold text-on-background border-none focus:ring-0 placeholder:text-surface-container-highest mb-8 p-0 bg-transparent" placeholder="Untitled Note" type="text"/>
+<textarea class="w-full h-[600px] text-lg leading-relaxed text-on-surface-variant border-none focus:ring-0 placeholder:text-surface-container-highest resize-none p-0 bg-transparent font-body" placeholder="Start writing or use AI to draft content..."></textarea>
+</div>
+</section>
+<!-- AI Assist Sidebar -->
+<aside class="w-80 flex flex-col gap-6">
+<!-- Voice Input Card -->
+<div class="bg-surface-container-low rounded-2xl p-6 flex flex-col items-center text-center gap-4">
+<div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20 cursor-pointer hover:scale-105 transition-transform active:scale-95">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">mic</span>
+</div>
+<div>
+<h3 class="font-headline font-bold text-on-surface">Voice to Note</h3>
+<p class="text-xs text-on-surface-variant mt-1 leading-relaxed">Speak your thoughts and let Potency transcribe and organize them instantly.</p>
+</div>
+</div>
+<!-- Agent Brain Chip Stack -->
+<div class="flex flex-col gap-2">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant px-2">Active AI Processes</p>
+<div class="bg-surface-container-highest rounded-xl p-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-sm">spellcheck</span>
+<span class="text-xs font-semibold text-on-surface">Grammar Engine</span>
+</div>
+<div class="text-[10px] text-primary bg-white px-2 py-0.5 rounded-full font-bold">LIVE</div>
+</div>
+<div class="bg-surface-container-highest rounded-xl p-3 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-sm">psychology</span>
+<span class="text-xs font-semibold text-on-surface">Semantic Linking</span>
+</div>
+<div class="w-2 h-2 rounded-full bg-surface-variant"></div>
+</div>
+</div>
+<!-- Export Section -->
+<div class="mt-4 bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+<h3 class="font-headline font-bold text-on-surface mb-4">Export Document</h3>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-surface-container hover:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-red-500 group-hover:scale-110 transition-transform">picture_as_pdf</span>
+<span class="text-xs font-bold text-on-surface">PDF</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-2 p-4 rounded-xl border border-surface-container hover:bg-surface-container-low transition-colors group">
+<span class="material-symbols-outlined text-blue-600 group-hover:scale-110 transition-transform">description</span>
+<span class="text-xs font-bold text-on-surface">Word</span>
+</button>
+</div>
+<button class="w-full mt-4 py-3 bg-surface-container-low text-on-surface font-semibold text-sm rounded-xl hover:bg-surface-container transition-colors">
+                        Copy to Clipboard
+                    </button>
+</div>
+<!-- Decorative Asset -->
+<div class="mt-auto rounded-2xl overflow-hidden aspect-[4/3] relative group">
+<img class="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-700" data-alt="top-down shot of minimalist desk with notebook, fountain pen, and soft morning sunlight creating long shadows" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDN_S6JvbfOYyaiIMLVxLOOEz5cNBocjN68m2clKM2FaKfGma8xohdsch_y-Jd3wRE5HpZXvvdfkKUsD2VMoriKjuAi-gEk0Z7mU2eqjoj5NQlFIlwQ6ejJxvHtUZovYSyA7ZMpbQko2GR60XwylK8PRgngGAIjUKxlYj9rUPa6lShCqULXGjWaPT9BQAuw6ZzCKxutrW4CJe61W0egj1daP-G51Mt3Mv1AZJw6RMOSYN4jDO8FuKQ9uWsaH6CJte2kmc9PJsInVY-U"/>
+<div class="absolute inset-0 bg-gradient-to-t from-primary/40 to-transparent"></div>
+<div class="absolute bottom-4 left-4 right-4">
+<p class="text-white text-[10px] font-bold uppercase tracking-widest opacity-80">Workspace Inspiration</p>
+<p class="text-white font-headline text-sm font-bold">Focus follows clarity.</p>
+</div>
+</div>
+</aside>
+</div>
+</main>
+</body></html>

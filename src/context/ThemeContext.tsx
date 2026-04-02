@@ -87,44 +87,45 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--accent-dim', accent.dim);
     root.style.setProperty('--accent-glow', accent.glow);
 
-    // Glass tokens
+    // Glass tokens — tuned for proper glassmorphism
     if (isDark) {
       root.style.setProperty('--bg-primary', '#0a0a0a');
       root.style.setProperty('--bg-secondary', '#111111');
       root.style.setProperty('--text-primary', '#f0f0f0');
       root.style.setProperty('--text-secondary', '#a0a0a0');
       root.style.setProperty('--text-muted', '#666666');
-      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.06)');
-      root.style.setProperty('--glass-bg-hover', 'rgba(255, 255, 255, 0.10)');
-      root.style.setProperty('--glass-bg-strong', 'rgba(255, 255, 255, 0.12)');
-      root.style.setProperty('--glass-bg-elevated', 'rgba(255, 255, 255, 0.08)');
-      root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.10)');
-      root.style.setProperty('--glass-border-hover', 'rgba(255, 255, 255, 0.18)');
-      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.4)');
-      root.style.setProperty('--sidebar-bg', 'rgba(10, 10, 10, 0.85)');
-      root.style.setProperty('--header-bg', 'rgba(10, 10, 10, 0.70)');
+      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.05)');
+      root.style.setProperty('--glass-bg-hover', 'rgba(255, 255, 255, 0.09)');
+      root.style.setProperty('--glass-bg-strong', 'rgba(255, 255, 255, 0.10)');
+      root.style.setProperty('--glass-bg-elevated', 'rgba(255, 255, 255, 0.07)');
+      root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.08)');
+      root.style.setProperty('--glass-border-hover', 'rgba(255, 255, 255, 0.16)');
+      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.5)');
+      root.style.setProperty('--sidebar-bg', 'rgba(12, 12, 12, 0.80)');
+      root.style.setProperty('--header-bg', 'rgba(12, 12, 12, 0.65)');
       root.style.setProperty('--grid-color', 'rgba(255, 255, 255, 0.06)');
       root.style.setProperty('--grid-dot', 'rgba(255, 255, 255, 0.15)');
     } else {
-      root.style.setProperty('--bg-primary', '#f5f5f5');
-      root.style.setProperty('--bg-secondary', '#eeeeee');
+      root.style.setProperty('--bg-primary', '#f8f8f8');
+      root.style.setProperty('--bg-secondary', '#f0f0f0');
       root.style.setProperty('--text-primary', '#1a1a1a');
       root.style.setProperty('--text-secondary', '#555555');
       root.style.setProperty('--text-muted', '#999999');
-      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.45)');
-      root.style.setProperty('--glass-bg-hover', 'rgba(255, 255, 255, 0.55)');
-      root.style.setProperty('--glass-bg-strong', 'rgba(255, 255, 255, 0.65)');
-      root.style.setProperty('--glass-bg-elevated', 'rgba(255, 255, 255, 0.55)');
-      root.style.setProperty('--glass-border', 'rgba(0, 0, 0, 0.08)');
-      root.style.setProperty('--glass-border-hover', 'rgba(0, 0, 0, 0.15)');
-      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.08)');
-      root.style.setProperty('--sidebar-bg', 'rgba(255, 255, 255, 0.70)');
-      root.style.setProperty('--header-bg', 'rgba(255, 255, 255, 0.60)');
+      // More translucent for proper glassmorphism in light mode
+      root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.35)');
+      root.style.setProperty('--glass-bg-hover', 'rgba(255, 255, 255, 0.50)');
+      root.style.setProperty('--glass-bg-strong', 'rgba(255, 255, 255, 0.55)');
+      root.style.setProperty('--glass-bg-elevated', 'rgba(255, 255, 255, 0.45)');
+      root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.50)');
+      root.style.setProperty('--glass-border-hover', 'rgba(255, 255, 255, 0.70)');
+      root.style.setProperty('--glass-shadow', '0 8px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.5)');
+      root.style.setProperty('--sidebar-bg', 'rgba(255, 255, 255, 0.50)');
+      root.style.setProperty('--header-bg', 'rgba(255, 255, 255, 0.45)');
       root.style.setProperty('--grid-color', 'rgba(0, 0, 0, 0.06)');
       root.style.setProperty('--grid-dot', 'rgba(0, 0, 0, 0.15)');
     }
 
-    root.style.setProperty('--glass-blur', '16px');
+    root.style.setProperty('--glass-blur', '20px');
   }, [mode, accentColor]);
 
   return (
