@@ -23,15 +23,21 @@ const WIKI_TIMEOUT_MS = 10000; // 10 seconds - increased for slow connections
 function createCombinedSignal(timeoutMs: number, externalSignal?: AbortSignal): AbortSignal {
   const controller = new AbortController();
   
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutId = setTimeout(() => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error(`Timeout after ${timeoutMs}ms`));
+    }
+  }, timeoutMs);
   
   if (externalSignal) {
     if (externalSignal.aborted) {
-      controller.abort();
+      controller.abort(new Error('External signal aborted'));
     } else {
       externalSignal.addEventListener('abort', () => {
         clearTimeout(timeoutId);
-        controller.abort();
+        if (!controller.signal.aborted) {
+          controller.abort(new Error('External signal aborted'));
+        }
       });
     }
   }
@@ -53,10 +59,16 @@ async function searchWikipedia(
     // Step 1: search for article titles
     const searchUrl = `${WIKI_SEARCH}?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*&srlimit=${maxResults}`;
     const searchResp = await fetch(searchUrl, { signal: combinedSignal });
-    if (!searchResp.ok) return [];
+    if (!searchResp.ok) {
+      console.warn(`[retrieval] Wikipedia search failed with status ${searchResp.status}`);
+      return [];
+    }
     const searchData = await searchResp.json() as { query: { search: { title: string }[] } };
     const titles = searchData.query?.search?.map((s) => s.title) ?? [];
-    if (titles.length === 0) return [];
+    if (titles.length === 0) {
+      console.log('[retrieval] No Wikipedia articles found for query:', query);
+      return [];
+    }
 
     // Step 2: fetch summaries for each title in parallel
     const summaries = await Promise.allSettled(
@@ -64,13 +76,19 @@ async function searchWikipedia(
         const summarySignal = createCombinedSignal(WIKI_TIMEOUT_MS, signal);
         const summaryUrl = `${WIKI_API}/page/summary/${encodeURIComponent(title)}`;
         const resp = await fetch(summaryUrl, { signal: summarySignal });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+          console.warn(`[retrieval] Failed to fetch summary for "${title}" with status ${resp.status}`);
+          return null;
+        }
         const data = await resp.json() as {
           title: string;
           extract: string;
           content_urls: { desktop: { page: string } };
         };
-        if (!data.extract) return null;
+        if (!data.extract) {
+          console.warn(`[retrieval] No extract found for "${title}"`);
+          return null;
+        }
         return {
           title: data.title,
           url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
@@ -80,16 +98,24 @@ async function searchWikipedia(
       }),
     );
 
-    return summaries.reduce<RetrievedSource[]>((acc, r) => {
+    const validSummaries = summaries.reduce<RetrievedSource[]>((acc, r) => {
       if (r.status === 'fulfilled' && r.value !== null) {
         acc.push(r.value);
+      } else if (r.status === 'rejected') {
+        console.warn('[retrieval] Summary fetch rejected:', r.reason);
       }
       return acc;
     }, []);
+
+    if (validSummaries.length === 0) {
+      console.log('[retrieval] No valid summaries retrieved for query:', query);
+    }
+
+    return validSummaries;
   } catch (err) {
     // Log but don't throw - let caller handle empty results
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.log('[retrieval] Wikipedia search aborted');
+    if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('Timeout'))) {
+      console.log('[retrieval] Wikipedia search aborted or timed out');
     } else {
       console.warn('[retrieval] Wikipedia search failed:', err);
     }

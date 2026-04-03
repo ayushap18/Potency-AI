@@ -272,7 +272,10 @@ export function App() {
 
   // ── Brain log helpers ──
   const pushBrainLog = useCallback((msg: string) => {
-    setBrainLog(prev => [...prev.slice(-80), msg]);
+    setBrainLog(prev => {
+      const newLog = [...prev, msg];
+      return newLog.length > 80 ? newLog.slice(-80) : newLog;
+    });
   }, []);
 
   const updateAgentStatus = useCallback((agent: string, status: AgentStatus) => {

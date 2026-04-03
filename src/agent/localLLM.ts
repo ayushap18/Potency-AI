@@ -154,6 +154,6 @@ export async function callLLMJson<T = Record<string, unknown>>(
 }
 
 function formatPrompt(system: string, user: string): string {
-  // Generic instruction-tuned format compatible with LFM2 models
-  return `System: ${system}\n\nUser: ${user}\n\nAssistant:`;
+  // LFM2 model optimized prompt format
+  return `<|system|>${system}<|end|>\n<|user|>${user}<|end|>\n<|assistant|>`;
 }
