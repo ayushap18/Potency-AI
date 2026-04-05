@@ -10,7 +10,11 @@ import { initSDK, getAccelerationMode } from './runanywhere';
 import { UnifiedChat } from './components/UnifiedChat';
 import { ToolsTab } from './components/ToolsTab';
 import { CursorGrid } from './components/CursorGrid';
+import { ChatHistory } from './components/ChatHistory';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useTheme, ACCENT_COLORS, type AccentColor, type ThemeMode, type BackgroundStyle } from './context/ThemeContext';
+import type { PotencyMode } from './agent/modelRouter';
+import { type ChatSession, listChats, saveChat, deleteChat, createNewChat, autoTitle } from './utils/storage';
 
 // ── SVG Icon helpers ──
 function SettingsIcon() {
@@ -65,32 +69,15 @@ function SidebarToggleIcon() {
 type SidebarTab = 'chats' | 'tools';
 type AgentStatus = 'idle' | 'running' | 'done' | 'error';
 
-// ── Placeholder chat history ──
-const CHAT_HISTORY = {
-  today: [
-    { id: '1', title: 'Website redesign ideas' },
-    { id: '2', title: 'React component architecture' },
-    { id: '3', title: 'API integration guide' },
-  ],
-  yesterday: [
-    { id: '4', title: 'Database schema design' },
-    { id: '5', title: 'CSS animations tutorial' },
-  ],
-  previous: [
-    { id: '6', title: 'TypeScript best practices' },
-    { id: '7', title: 'Authentication with JWT' },
-    { id: '8', title: 'Deploy to Vercel guide' },
-    { id: '9', title: 'Python data analysis tips' },
-  ],
-};
+// ── Placeholder chat history removed — now uses IndexedDB via ChatHistory component ──
 
 // ── Agent Brain Sidebar ──
 const AGENT_CARDS = [
-  { key: 'classifier', label: 'CLASS', title: 'Classifier Agent' },
-  { key: 'planner',    label: 'PLAN',  title: 'Planner Agent'    },
-  { key: 'retriever',  label: 'FETCH', title: 'Retriever Agent'  },
-  { key: 'analyst',    label: 'ANAL',  title: 'Analyst Agent'    },
-  { key: 'writer',     label: 'WRITE', title: 'Writer Agent'     },
+  { key: 'classifier', label: 'CA', title: 'Classifier Agent' },
+  { key: 'planner',    label: 'PA', title: 'Planner Agent'    },
+  { key: 'retriever',  label: 'RA', title: 'Retriever Agent'  },
+  { key: 'analyst',    label: 'AA', title: 'Analyst Agent'    },
+  { key: 'writer',     label: 'WA', title: 'Writer Agent'     },
 ];
 
 interface BrainSidebarProps {
@@ -231,7 +218,13 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chats');
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Potency mode state (Fast / Thinking / Pro)
+  const [currentMode, setCurrentMode] = useState<PotencyMode>('fast');
+
+  // Chat history state (from IndexedDB)
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
   // Brain sidebar data
   const [agentStatus, setAgentStatus] = useState<Record<string, AgentStatus>>({
@@ -284,6 +277,62 @@ export function App() {
     if (status === 'done')    pushBrainLog(`[${agent.toUpperCase()}] complete ✓`);
   }, [pushBrainLog]);
 
+  // ── Chat history management ──
+  const refreshChats = useCallback(async () => {
+    try {
+      const chats = await listChats();
+      setChatSessions(chats);
+    } catch (err) {
+      console.warn('[App] Failed to load chats:', err);
+    }
+  }, []);
+
+  useEffect(() => { refreshChats(); }, [refreshChats]);
+
+  const handleNewChat = useCallback(async () => {
+    const chat = createNewChat();
+    await saveChat(chat);
+    setActiveChatId(chat.id);
+    await refreshChats();
+  }, [refreshChats]);
+
+  const handleDeleteChat = useCallback(async (id: string) => {
+    await deleteChat(id);
+    if (activeChatId === id) setActiveChatId(null);
+    await refreshChats();
+  }, [activeChatId, refreshChats]);
+
+  const handleRenameChat = useCallback(async (id: string, newTitle: string) => {
+    const sessions = [...chatSessions];
+    const chat = sessions.find(c => c.id === id);
+    if (chat) {
+      chat.title = newTitle;
+      await saveChat(chat);
+      await refreshChats();
+    }
+  }, [chatSessions, refreshChats]);
+
+  const handlePinChat = useCallback(async (id: string) => {
+    const sessions = [...chatSessions];
+    const chat = sessions.find(c => c.id === id);
+    if (chat) {
+      chat.pinned = !chat.pinned;
+      await saveChat(chat);
+      await refreshChats();
+    }
+  }, [chatSessions, refreshChats]);
+
+  const handleArchiveChat = useCallback(async (id: string) => {
+    const sessions = [...chatSessions];
+    const chat = sessions.find(c => c.id === id);
+    if (chat) {
+      chat.archived = true;
+      await saveChat(chat);
+      if (activeChatId === id) setActiveChatId(null);
+      await refreshChats();
+    }
+  }, [chatSessions, activeChatId, refreshChats]);
+
   // Connectivity dot
   const connDot = connectivity === 'good'
     ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
@@ -319,13 +368,12 @@ export function App() {
     );
   }
 
-  // Filter chat history
-  const filterHistory = (items: { id: string; title: string }[]) =>
-    searchQuery ? items.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase())) : items;
+
 
   return (
-    <div className="min-h-screen antialiased overflow-x-hidden flex flex-col" style={{ color: 'var(--text-primary)' }}>
-      <CursorGrid />
+    <ErrorBoundary>
+      <div className="min-h-screen antialiased overflow-x-hidden flex flex-col" style={{ color: 'var(--text-primary)' }}>
+        <CursorGrid />
 
       {/* ══════════════ HEADER ══════════════ */}
       <header
@@ -470,47 +518,16 @@ export function App() {
           {/* Content based on tab */}
           {sidebarTab === 'chats' ? (
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Search */}
-              <div className="px-4 py-2">
-                <div className="sidebar-search">
-                  <span className="material-symbols-outlined text-sm" style={{ color: 'var(--text-muted)' }}>search</span>
-                  <input
-                    type="text"
-                    placeholder="Search chats..."
-                    className="sidebar-search-input"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Chat history */}
-              <div className="flex-1 overflow-y-auto px-2 custom-scrollbar">
-                {filterHistory(CHAT_HISTORY.today).length > 0 && (
-                  <div className="mb-4">
-                    <p className="sidebar-section-label">TODAY</p>
-                    {filterHistory(CHAT_HISTORY.today).map(chat => (
-                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
-                    ))}
-                  </div>
-                )}
-                {filterHistory(CHAT_HISTORY.yesterday).length > 0 && (
-                  <div className="mb-4">
-                    <p className="sidebar-section-label">YESTERDAY</p>
-                    {filterHistory(CHAT_HISTORY.yesterday).map(chat => (
-                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
-                    ))}
-                  </div>
-                )}
-                {filterHistory(CHAT_HISTORY.previous).length > 0 && (
-                  <div className="mb-4">
-                    <p className="sidebar-section-label">PREVIOUS 7 DAYS</p>
-                    {filterHistory(CHAT_HISTORY.previous).map(chat => (
-                      <button key={chat.id} className="sidebar-chat-item">{chat.title}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ChatHistory
+                chats={chatSessions}
+                activeChatId={activeChatId}
+                onSelectChat={setActiveChatId}
+                onNewChat={handleNewChat}
+                onDeleteChat={handleDeleteChat}
+                onRenameChat={handleRenameChat}
+                onPinChat={handlePinChat}
+                onArchiveChat={handleArchiveChat}
+              />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto px-2 py-2 custom-scrollbar">
@@ -557,18 +574,16 @@ export function App() {
                 borderRight: '1px solid var(--glass-border)',
               }}
             >
-              <div className="p-4 flex-1 overflow-y-auto">
-                <button className="sidebar-new-chat-btn mb-4">
-                  <span className="material-symbols-outlined text-base">edit_square</span>
-                  <span>New chat</span>
-                </button>
-                <div className="mb-4">
-                  <p className="sidebar-section-label">TODAY</p>
-                  {CHAT_HISTORY.today.map(chat => (
-                    <button key={chat.id} className="sidebar-chat-item" onClick={() => setSidebarCollapsed(false)}>{chat.title}</button>
-                  ))}
-                </div>
-              </div>
+              <ChatHistory
+                chats={chatSessions}
+                activeChatId={activeChatId}
+                onSelectChat={(id) => { setActiveChatId(id); setSidebarCollapsed(false); }}
+                onNewChat={async () => { await handleNewChat(); setSidebarCollapsed(false); }}
+                onDeleteChat={handleDeleteChat}
+                onRenameChat={handleRenameChat}
+                onPinChat={handlePinChat}
+                onArchiveChat={handleArchiveChat}
+              />
             </aside>
           </>
         )}
@@ -585,7 +600,12 @@ export function App() {
           {sidebarTab === 'tools' ? (
             <ToolsTab />
           ) : (
-            <UnifiedChat onBrainLog={pushBrainLog} onAgentStatus={updateAgentStatus} />
+            <UnifiedChat
+              onBrainLog={pushBrainLog}
+              onAgentStatus={updateAgentStatus}
+              currentMode={currentMode}
+              onModeChange={setCurrentMode}
+            />
           )}
         </main>
       </div>
@@ -593,5 +613,6 @@ export function App() {
       {/* ══════════════ SIDE PANELS ══════════════ */}
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} accel={accel} />
     </div>
+    </ErrorBoundary>
   );
 }

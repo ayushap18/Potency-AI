@@ -18,13 +18,14 @@ import { callLLMJson, streamLLM, LLMJsonParseError, LLMAbortError } from './loca
 import {
   INTENT_CLASSIFICATION,
   RESEARCH_PLANNING,
-  ARCHITECTURE_ANALYSIS,
-  TRADEOFF_COMPARISON,
   SYNTHESIS,
   FOLLOW_UP,
   SEARCH_QUERY_GEN,
 } from './prompts';
 import { retrieveSources, formatSourcesForPrompt, type RetrievedSource } from './retrieval';
+import type { PotencyMode } from './modelRouter';
+import { runReasoningModules } from './reasoning';
+import type { QueryCategory, AnalysisResult } from './pipeline';
 
 // ── Public Types ──────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ export interface AgentCallbacks {
 
 export interface AgentOptions {
   signal?: AbortSignal;
+  mode?: PotencyMode;
 }
 
 export interface FinalResult {
@@ -146,7 +148,7 @@ export async function runResearchAgent(
       const raw = await callLLMJson<IntentResult>(
         INTENT_CLASSIFICATION.system,
         INTENT_CLASSIFICATION.user({ query }),
-        { maxTokens: 300, signal },
+        { mode: options.mode || 'fast', signal }
       );
       if (raw.category) intent = { ...intent, ...raw };
       emit('intent', 'done', `${intent.category} · ${intent.mode}`);
@@ -168,7 +170,7 @@ export async function runResearchAgent(
       const sqRaw = await callLLMJson<{ queries: string[] }>(
         SEARCH_QUERY_GEN.system,
         SEARCH_QUERY_GEN.user({ query }),
-        { maxTokens: 200, signal },
+        { mode: options.mode || 'fast', signal }
       );
       if (sqRaw.queries?.length) {
         searchQueries = [query, ...sqRaw.queries].slice(0, 4);
@@ -181,7 +183,7 @@ export async function runResearchAgent(
           intent: JSON.stringify(intent),
           query,
         }),
-        { maxTokens: 400, signal },
+        { mode: options.mode || 'fast', signal }
       );
       // planSections extracted but currently unused
       emit('planning', 'done', `${searchQueries.length} search queries`);
@@ -218,61 +220,46 @@ export async function runResearchAgent(
     checkAborted();
     emit('analysis', 'running');
 
+    let analysisResults: AnalysisResult[] = [];
     const contextText = formatSourcesForPrompt(sources);
-    const technology = intent.entities.length > 0 ? intent.entities.join(', ') : query;
 
-    let analysisText = '';
-
-    if (intent.category === 'COMPARISON' && intent.entities.length >= 2) {
-      // Tradeoff comparison
-      try {
-        const compRaw = await callLLMJson<Record<string, unknown>>(
-          TRADEOFF_COMPARISON.system,
-          TRADEOFF_COMPARISON.user({
-            technologies: intent.entities.join(' vs '),
-            use_case: intent.domain,
-            context: truncateAtSentence(contextText, 3000),
-          }),
-          { maxTokens: 500, signal },
-        );
-        analysisText = JSON.stringify(compRaw, null, 2);
-        emit('analysis', 'done');
-      } catch (err) {
-        if (!isRecoverableError(err)) throw err;
-        const errMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.warn('[Agent] Tradeoff comparison failed:', errMsg);
-        analysisText = truncateAtSentence(contextText, 2000);
-        emit('analysis', 'partial', 'Using raw context', `Analysis failed: ${errMsg}`);
+    try {
+      analysisResults = await runReasoningModules(
+        intent.category as QueryCategory,
+        sources,
+        {
+          research_question: query,
+          entities: intent.entities,
+          domain: intent.domain,
+          constraints: [],
+          technology: intent.entities.length > 0 ? intent.entities.join(', ') : query,
+        },
+        options.mode || 'fast'
+      );
+      
+      if (analysisResults.length > 0) {
+        emit('analysis', 'done', `${analysisResults.length} modules completed`);
+      } else {
+        emit('analysis', 'done', 'Skipped reasoning module');
       }
-    } else {
-      // Architecture / general analysis
-      try {
-        const archRaw = await callLLMJson<Record<string, unknown>>(
-          ARCHITECTURE_ANALYSIS.system,
-          ARCHITECTURE_ANALYSIS.user({
-            technology,
-            query,
-            context: truncateAtSentence(contextText, 3000),
-          }),
-          { maxTokens: 500, signal },
-        );
-        analysisText = JSON.stringify(archRaw, null, 2);
-        emit('analysis', 'done');
-      } catch (err) {
-        if (!isRecoverableError(err)) throw err;
-        const errMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.warn('[Agent] Architecture analysis failed:', errMsg);
-        analysisText = truncateAtSentence(contextText, 2000);
-        emit('analysis', 'partial', 'Using raw context', `Analysis failed: ${errMsg}`);
-      }
+    } catch (err) {
+      if (!isRecoverableError(err)) throw err;
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.warn('[Agent] Reasoning modules failed:', errMsg);
+      emit('analysis', 'partial', 'Analysis skipped', `Reasoning error: ${errMsg}`);
     }
 
     // ── Stage 5: Synthesis (streaming) ──
     checkAborted();
     emit('synthesis', 'running');
 
+    let combinedAnalysisText = '';
+    if (analysisResults.length > 0) {
+      combinedAnalysisText = analysisResults.map(r => `[${r.module_name}]\n${JSON.stringify(r.result, null, 2)}`).join('\n\n');
+    }
+
     const synthesisContext = [
-      analysisText ? `## Analysis\n${analysisText}` : '',
+      combinedAnalysisText ? `## Deep Analysis\n${combinedAnalysisText}` : '',
       sources.length > 0 ? `## Sources\n${truncateAtSentence(contextText, 4000)}` : '',
     ]
       .filter(Boolean)
@@ -287,9 +274,10 @@ export async function runResearchAgent(
         analysis: synthesisContext,
         mode: intent.mode,
       }),
-      1400,
-      0.35,
+      0, // falsy maxTokens lets streamLLM fallback to mode config
+      undefined, // undefined temperature lets streamLLM fallback to mode config
       signal,
+      options.mode || 'fast'
     );
 
     for await (const token of stream) {
@@ -312,7 +300,7 @@ export async function runResearchAgent(
           query,
           report_summary: reportAccumulated.slice(0, 1000),
         }),
-        { maxTokens: 250, signal },
+        { mode: options.mode || 'fast', signal }
       );
       followUps = fuRaw.questions ?? [];
       emit('followup', 'done');

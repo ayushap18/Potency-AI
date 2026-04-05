@@ -1280,25 +1280,41 @@
   }
   .unified-stop-btn:hover { opacity: 0.9; }
 
-  /* ── Popups (lightweight, no Radix) ── */
+  /* ── Popups (enhanced readability with frosted glass) ── */
   .unified-popup {
     position: absolute;
     bottom: calc(100% + 8px);
     left: 0;
-    background: var(--glass-bg-elevated);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--glass-border);
+    
+    /* Enhanced background for better text visibility */
+    background: rgba(20, 20, 24, 0.95); /* More opaque base for dark theme */
+    backdrop-filter: blur(32px) saturate(180%); /* Stronger blur + saturation */
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    
+    border: 1px solid rgba(255, 255, 255, 0.12); /* Brighter border for contrast */
     border-radius: var(--radius-lg);
     padding: 6px;
     min-width: 200px;
-    box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+    
+    /* Enhanced shadow for depth and separation */
+    box-shadow: 
+      0 12px 48px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+      0 1px 2px rgba(255, 255, 255, 0.1) inset;
+    
     animation: popup-enter 0.15s ease;
     z-index: 100;
   }
+  
   @keyframes popup-enter {
-    from { opacity: 0; transform: translateY(4px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { 
+      opacity: 0; 
+      transform: translateY(4px) scale(0.96); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0) scale(1); 
+    }
   }
 
   .unified-popup-item {
@@ -1315,14 +1331,39 @@
     cursor: pointer;
     transition: all 0.15s ease;
     text-align: left;
+    
+    /* Enhanced text readability */
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    font-weight: 500; /* Slightly bolder for better readability */
   }
+  
   .unified-popup-item:hover {
-    background: var(--glass-bg-hover);
+    background: rgba(255, 255, 255, 0.08); /* Brighter hover state */
     color: var(--text-primary);
   }
+  
   .unified-popup-item.active {
     color: var(--accent);
     background: var(--accent-dim);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Light theme overrides for better visibility */
+  .light .unified-popup {
+    background: rgba(248, 248, 250, 0.96); /* Light, opaque base */
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 
+      0 12px 48px rgba(0, 0, 0, 0.15), 
+      0 20px 60px rgba(0, 0, 0, 0.1),
+      0 0 0 1px rgba(0, 0, 0, 0.05) inset;
+  }
+
+  .light .unified-popup-item {
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.8);
+  }
+
+  .light .unified-popup-item:hover {
+    background: rgba(0, 0, 0, 0.05);
   }
 
   /* ── Active tool badge (inline in toolbar) ── */
@@ -1700,5 +1741,15 @@
   .note-export-btn:hover {
     background: var(--glass-bg-hover);
     color: var(--text-primary);
+  }
+
+  /* ── Error Boundary Screen ── */
+  .error-boundary-screen {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+    background: var(--bg);
   }
 }

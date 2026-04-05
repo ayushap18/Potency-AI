@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, Component, ErrorInfo } from 'react';
 import { ModelCategory, VideoCapture, ModelManager } from '@runanywhere/web';
 import { VLMWorkerBridge } from '@runanywhere/web-llamacpp';
 import { useModelLoader } from '../hooks/useModelLoader';
@@ -13,7 +13,37 @@ const MAX_CONSECUTIVE_CRASHES = 3;
 interface VisionResult { text: string; totalMs: number; }
 interface DiagResult { label: string; status: 'pass' | 'fail' | 'checking' | 'skip'; detail?: string; }
 
+class VisionErrorBoundary extends Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("Vision pipeline error:", error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex flex-col p-8 items-center justify-center text-center space-y-4">
+          <span className="material-symbols-outlined text-[48px] text-[var(--danger)]">error</span>
+          <h2 className="text-xl font-bold">Vision engine crashed</h2>
+          <p className="text-sm text-[var(--text-muted)] max-w-md">{this.state.error?.message || "An unexpected error occurred in the WebAssembly vision thread."}</p>
+          <button className="btn-primary" onClick={() => this.setState({hasError: false, error: null})}>Restart Vision Engine</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function VisionTab() {
+  return (
+    <VisionErrorBoundary>
+      <VisionTabInner />
+    </VisionErrorBoundary>
+  );
+}
+
+function VisionTabInner() {
   const loader = useModelLoader(ModelCategory.Multimodal);
   const [cameraActive, setCameraActive] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -369,6 +399,23 @@ export function VisionTab() {
               type="text" placeholder="Directive details (e.g. 'Identify text visible in this frame')"
               value={prompt} onChange={(e) => setPrompt(e.target.value)} disabled={liveMode}
             />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-1">
+            {[
+              { label: 'Describe', prompt: 'Describe what you see briefly.' },
+              { label: 'Read Text', prompt: 'Read and output any text visible in the frame.' },
+              { label: 'Layout', prompt: 'Analyze the layout and structure of the visible scene.' }
+            ].map(p => (
+              <button
+                key={p.label}
+                onClick={() => setPrompt(p.prompt)}
+                disabled={liveMode}
+                className="text-[10px] uppercase tracking-wider font-bold px-3 py-1 rounded-full border border-white/10 hover:bg-white/5 transition-colors"
+                style={{ color: prompt === p.prompt ? 'var(--accent)' : 'var(--text-muted)' }}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
 
           <h3 className="text-sm font-bold tracking-widest uppercase flex items-center gap-2 mt-4 font-mono" style={{ color: 'var(--text-muted)' }}>

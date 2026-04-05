@@ -5,12 +5,8 @@
  * No API key needed. Wikipedia allows cross-origin requests from any origin.
  */
 
-export interface RetrievedSource {
-  title: string;
-  url: string;
-  content: string;
-  type: 'wikipedia' | 'knowledge';
-}
+import type { RetrievedSource } from './pipeline';
+export type { RetrievedSource };
 
 const WIKI_API = 'https://en.wikipedia.org/api/rest_v1';
 const WIKI_SEARCH = 'https://en.wikipedia.org/w/api.php';
@@ -93,7 +89,11 @@ async function searchWikipedia(
           title: data.title,
           url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
           content: data.extract.slice(0, 2500), // cap per source
-          type: 'wikipedia' as const,
+          source_type: 'wikipedia',
+          id: data.title.replace(/\s+/g, '-').toLowerCase(),
+          relevance_score: 1.0,
+          credibility_score: 0.9,
+          metadata: {},
         };
       }),
     );

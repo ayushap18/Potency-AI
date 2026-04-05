@@ -2,9 +2,12 @@
  * localLLM.ts — Thin wrapper around the RunAnywhere TextGeneration WASM API.
  * Provides callLLM() for full-text JSON responses and streamLLM() for token streaming.
  * No server, no API key — inference runs 100% in the browser via llama.cpp WASM.
+ *
+ * Supports PotencyMode for automatic temperature/maxTokens selection.
  */
 
 import { TextGeneration } from '@runanywhere/web-llamacpp';
+import { getModelForMode, type PotencyMode } from './modelRouter';
 
 /** Error thrown when LLM JSON parsing fails after all retries */
 export class LLMJsonParseError extends Error {
@@ -33,9 +36,17 @@ export async function callLLM(
   maxTokens = 600,
   temperature = 0.2,
   signal?: AbortSignal,
+  mode?: PotencyMode,
 ): Promise<string> {
   if (signal?.aborted) throw new LLMAbortError();
-  
+
+  // If mode is provided, use its config for defaults
+  if (mode) {
+    const config = getModelForMode(mode);
+    maxTokens = maxTokens || config.maxTokens;
+    temperature = temperature ?? config.temperature;
+  }
+
   // LFM2 instruction format (works for both 350M and 1.2B-Tool)
   const prompt = formatPrompt(systemPrompt, userPrompt);
 
@@ -61,9 +72,17 @@ export async function* streamLLM(
   maxTokens = 1200,
   temperature = 0.3,
   signal?: AbortSignal,
+  mode?: PotencyMode,
 ): AsyncGenerator<string> {
   if (signal?.aborted) throw new LLMAbortError();
-  
+
+  // If mode is provided, use its config
+  if (mode) {
+    const config = getModelForMode(mode);
+    maxTokens = maxTokens || config.maxTokens;
+    temperature = temperature ?? config.temperature;
+  }
+
   const prompt = formatPrompt(systemPrompt, userPrompt);
   const { stream } = await TextGeneration.generateStream(prompt, {
     maxTokens,
@@ -80,6 +99,7 @@ export interface CallLLMJsonOptions {
   maxTokens?: number;
   maxRetries?: number;
   signal?: AbortSignal;
+  mode?: PotencyMode;
 }
 
 /**
@@ -121,12 +141,33 @@ function tryParseJson<T>(raw: string): T | null {
  * @throws {LLMJsonParseError} If JSON parsing fails after all retries
  * @throws {LLMAbortError} If the operation is aborted
  */
+/**
+ * Call LLM and parse response as JSON. Overloaded signatures for convenience.
+ * @param systemPrompt - System instruction
+ * @param userPrompt - User query
+ * @param modeOrOptions - Either a PotencyMode string or CallLLMJsonOptions object
+ */
 export async function callLLMJson<T = Record<string, unknown>>(
   systemPrompt: string,
   userPrompt: string,
-  options: CallLLMJsonOptions = {},
+  modeOrOptions?: PotencyMode | CallLLMJsonOptions,
 ): Promise<T> {
-  const { maxTokens = 400, maxRetries = 2, signal } = options;
+  // Normalize arguments
+  let options: CallLLMJsonOptions = {};
+  if (typeof modeOrOptions === 'string') {
+    options = { mode: modeOrOptions };
+  } else if (modeOrOptions) {
+    options = modeOrOptions;
+  }
+
+  const { maxRetries = 2, signal, mode } = options;
+  let { maxTokens = 400 } = options;
+
+  // Apply mode config if provided
+  if (mode) {
+    const config = getModelForMode(mode);
+    maxTokens = options.maxTokens || config.maxTokens;
+  }
   
   let lastRaw = '';
   const temperatures = [0.1, 0.2, 0.35]; // Increase temperature on retries
@@ -135,7 +176,7 @@ export async function callLLMJson<T = Record<string, unknown>>(
     if (signal?.aborted) throw new LLMAbortError();
     
     const temp = temperatures[Math.min(attempt, temperatures.length - 1)];
-    const raw = await callLLM(systemPrompt, userPrompt, maxTokens, temp, signal);
+    const raw = await callLLM(systemPrompt, userPrompt, maxTokens, temp, signal, mode);
     lastRaw = raw;
     
     const parsed = tryParseJson<T>(raw);

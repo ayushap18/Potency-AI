@@ -1,18 +1,45 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, Component, ErrorInfo } from 'react';
 import { VoicePipeline, ModelCategory, ModelManager, AudioCapture, AudioPlayback, SpeechActivity } from '@runanywhere/web';
 import { VAD } from '@runanywhere/web-onnx';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
 
-type VoiceState = 'idle' | 'loading-models' | 'listening' | 'waiting-pause' | 'processing' | 'speaking';
+class VoiceErrorBoundary extends Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error("Voice pipeline error:", error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex flex-col p-8 items-center justify-center text-center space-y-4">
+          <span className="material-symbols-outlined text-[48px] text-[var(--danger)]">error</span>
+          <h2 className="text-xl font-bold">Voice engine crashed</h2>
+          <p className="text-sm text-[var(--text-muted)] max-w-md">{this.state.error?.message || "An unexpected error occurred in the WebAssembly audio thread."}</p>
+          <button className="btn-primary" onClick={() => this.setState({hasError: false, error: null})}>Restart Voice Engine</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
-// Time to wait after speech pauses before auto-processing
-const SILENCE_TIMEOUT_MS = 2500;
+type VoiceState = 'idle' | 'loading-models' | 'listening' | 'waiting-pause' | 'processing' | 'speaking';
 
 // Diagnostics result for self-check
 interface DiagResult { label: string; status: 'pass' | 'fail' | 'checking' | 'skip'; detail?: string; }
 
 export function VoiceTab() {
+  return (
+    <VoiceErrorBoundary>
+      <VoiceTabInner />
+    </VoiceErrorBoundary>
+  );
+}
+
+function VoiceTabInner() {
   const llmLoader = useModelLoader(ModelCategory.Language, true);
   const sttLoader = useModelLoader(ModelCategory.SpeechRecognition, true);
   const ttsLoader = useModelLoader(ModelCategory.SpeechSynthesis, true);
@@ -23,6 +50,8 @@ export function VoiceTab() {
   const [response, setResponse] = useState('');
   const [audioLevel, setAudioLevel] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  
+  const [silenceThreshold, setSilenceThreshold] = useState(2500);
 
   // Diagnostics
   const [showDiag, setShowDiag] = useState(false);
@@ -38,12 +67,14 @@ export function VoiceTab() {
   // Track audio playback so we don't set idle prematurely
   const playbackDoneRef = useRef<Promise<void> | null>(null);
   const autoRestartRef = useRef(true);
+  const pendingRestartRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
       micRef.current?.stop();
       vadUnsub.current?.();
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+      pendingRestartRef.current = 0;
     };
   }, []);
 
@@ -99,7 +130,7 @@ export function VoiceTab() {
               accumulatedSamplesRef.current = [];
               processSpeechRef.current?.(combined);
             }
-          }, SILENCE_TIMEOUT_MS);
+          }, silenceThreshold);
         }
       } else if (activity === SpeechActivity.Started) {
         setVoiceState('listening');
@@ -114,6 +145,7 @@ export function VoiceTab() {
       clearTimeout(silenceTimeoutRef.current);
       silenceTimeoutRef.current = null;
     }
+    pendingRestartRef.current = 0;
     accumulatedSamplesRef.current = [];
     micRef.current?.stop();
     vadUnsub.current?.();
@@ -165,11 +197,12 @@ export function VoiceTab() {
     setVoiceState('idle');
     setAudioLevel(0);
 
-    // Auto-restart listening for continuous conversation
+    // Auto-restart listening for continuous conversation (fix race condition)
     if (autoRestartRef.current) {
-      // Small delay so the user sees the response before we start listening again
+      const restartId = Date.now();
+      pendingRestartRef.current = restartId;
       setTimeout(() => {
-        if (autoRestartRef.current) {
+        if (autoRestartRef.current && pendingRestartRef.current === restartId) {
           startListening();
         }
       }, 800);
@@ -296,9 +329,14 @@ export function VoiceTab() {
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 space-y-8 custom-scrollbar">
       {pendingLoaders.length > 0 && voiceState === 'idle' && (
-        <ModelBanner state={pendingLoaders[0].loader.state} progress={pendingLoaders[0].loader.progress}
-          error={pendingLoaders[0].loader.error} onLoad={ensureModels}
-          label={`Voice (${pendingLoaders.map((l) => l.label).join(', ')})`} />
+        <div className="space-y-2">
+          <ModelBanner state={pendingLoaders[0].loader.state} progress={pendingLoaders[0].loader.progress}
+            error={pendingLoaders[0].loader.error} onLoad={ensureModels}
+            label={`Voice (${pendingLoaders.map((l) => l.label).join(', ')})`} />
+          <div className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] text-center w-full">
+            Loading sequence • {4 - pendingLoaders.length} of 4 components ready
+          </div>
+        </div>
       )}
 
       {error && (

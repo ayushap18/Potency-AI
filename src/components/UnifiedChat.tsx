@@ -13,27 +13,28 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ModelCategory, ModelManager } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
-import { useModelLoader } from '../hooks/useModelLoader';
+import { useDualModelLoader } from '../hooks/useDualModelLoader';
 import { ModelBanner } from './ModelBanner';
 import { NotePanel } from './NotePanel';
 import { runResearchAgent, type PipelineStageId, type PipelineStatus, type FinalResult } from '../agent/agent';
 import type { RetrievedSource } from '../agent/retrieval';
+import { ModeSelector } from './ModeSelector';
+import { getModelForMode, type PotencyMode } from '../agent/modelRouter';
 
 // ── Tool definitions ──
-type ToolId = 'note' | 'research' | 'think' | 'code';
+type ToolId = 'note' | 'research' | 'code';
 
 interface ToolDef {
   id: ToolId;
   name: string;
   shortName: string;
-  icon: 'edit_note' | 'travel_explore' | 'lightbulb' | 'code';
+  icon: 'edit_note' | 'travel_explore' | 'code';
   isSvgIcon?: boolean;
 }
 
 const TOOLS: ToolDef[] = [
   { id: 'note', name: 'Note', shortName: 'Note', icon: 'edit_note' },
   { id: 'research', name: 'Run deep research', shortName: 'Research', icon: 'travel_explore' },
-  { id: 'think', name: 'Think for longer', shortName: 'Think', icon: 'lightbulb' },
   { id: 'code', name: 'Code', shortName: 'Code', icon: 'code', isSvgIcon: true },
 ];
 
@@ -43,7 +44,6 @@ const SYSTEM_PROMPTS: Record<ToolId | 'default', string> = {
   research: 'You are a deep research agent. Perform thorough research with citations. Provide comprehensive, well-structured analysis with multiple perspectives.',
   code: 'You are an expert code assistant. Provide clean, well-documented code with explanations. Use best practices, include comments, and explain your approach step by step.',
   note: 'You are a writing assistant. Help draft, edit, and organize content. Be clear, creative, and focused on producing high-quality written material.',
-  think: 'Take your time to think through this carefully. Analyze the problem from multiple angles. Provide a thorough, well-reasoned response with detailed explanations.',
 };
 
 // ── Pipeline stages (for research mode) ──
@@ -101,10 +101,12 @@ function CodeIcon({ className }: { className?: string }) {
 interface UnifiedChatProps {
   onBrainLog?: (msg: string) => void;
   onAgentStatus?: (agent: string, status: 'idle' | 'running' | 'done' | 'error') => void;
+  currentMode: PotencyMode;
+  onModeChange: (mode: PotencyMode) => void;
 }
 
-export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
-  const loader = useModelLoader(ModelCategory.Language);
+export function UnifiedChat({ onBrainLog, onAgentStatus, currentMode, onModeChange }: UnifiedChatProps) {
+  const loader = useDualModelLoader();
 
   // Messages & input
   const [messages, setMessages] = useState<Message[]>([]);
@@ -154,6 +156,15 @@ export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
     }
   }, [input]);
 
+  // Auto-switch model when mode changes
+  useEffect(() => {
+    // Only switch if models are ready
+    if (loader.state === 'ready' && !generating) {
+      console.log(`[UnifiedChat] Mode changed to ${currentMode}, ensuring correct model is loaded`);
+      loader.ensureForMode(currentMode);
+    }
+  }, [currentMode, loader, generating]);
+
   // Close popups on click outside
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -182,9 +193,6 @@ export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
     if (toolId === 'note') {
       setNotePanelOpen(true);
       setSelectedTool('note');
-    } else if (toolId === 'think') {
-      // Think is a toggle
-      setSelectedTool(prev => prev === 'think' ? null : 'think');
     } else {
       setSelectedTool(toolId);
     }
@@ -213,82 +221,141 @@ export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
     const text = input.trim();
     if (!text || generating) return;
 
-    // Ensure model is loaded
-    if (loader.state !== 'ready') {
-      const ok = await loader.ensure();
-      if (!ok) return;
-    }
-
-    const activeTool = selectedTool;
-    const attachments: Message['attachments'] = [];
-    if (imagePreview && imageFile) {
-      attachments.push({ type: 'image', url: imagePreview, name: imageFile.name });
-    }
-
-    // If research tool is selected, run research pipeline instead of regular chat
-    if (activeTool === 'research') {
-      await runResearch(text, attachments);
-      return;
-    }
-
-    // Regular chat flow
-    setInput('');
-    setImagePreview(null);
-    setImageFile(null);
-    setGenerating(true);
-
-    setMessages(prev => {
-      assistantIdxRef.current = prev.length + 1;
-      return [
-        ...prev,
-        { role: 'user', text, tool: activeTool ?? undefined, attachments: attachments.length > 0 ? attachments : undefined },
-        { role: 'assistant', text: '', tool: activeTool ?? undefined },
-      ];
-    });
-
     try {
-      const systemPrompt = SYSTEM_PROMPTS[activeTool || 'default'];
-      const maxTokens = activeTool === 'think' ? 2048 : 512;
-      const fullPrompt = systemPrompt + '\n\nUser: ' + text;
-
-      const { stream, result: resultPromise, cancel } = await TextGeneration.generateStream(
-        fullPrompt,
-        { maxTokens, temperature: activeTool === 'think' ? 0.4 : 0.7 }
-      );
-      cancelRef.current = cancel;
-
-      let accumulated = '';
-      for await (const token of stream) {
-        accumulated += token;
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[assistantIdxRef.current] = { ...updated[assistantIdxRef.current], text: accumulated };
-          return updated;
-        });
+      // Ensure model is loaded - if not ready, download both models
+      if (loader.state !== 'ready') {
+        console.log('[UnifiedChat] Model not ready, attempting to load...');
+        const ok = await loader.ensureBoth(); // Download both models on first use
+        if (!ok) {
+          // Show user-friendly error
+          setMessages(prev => [
+            ...prev,
+            { role: 'user', text },
+            { role: 'assistant', text: '❌ **Model failed to load**\n\nPlease try:\n1. Refreshing the page\n2. Checking your internet connection\n3. Opening the Model Manager to download the model manually\n\nIf the issue persists, try clearing your browser cache.' },
+          ]);
+          return;
+        }
+      } else {
+        // Make sure we have the right model for the current mode
+        await loader.ensureForMode(currentMode);
       }
 
-      const result = await resultPromise;
+      const activeTool = selectedTool;
+      const attachments: Message['attachments'] = [];
+      if (imagePreview && imageFile) {
+        attachments.push({ type: 'image', url: imagePreview, name: imageFile.name });
+      }
+
+      // If research tool is selected, run research pipeline instead of regular chat
+      if (activeTool === 'research') {
+        await runResearch(text, attachments);
+        return;
+      }
+
+      // Regular chat flow
+      setInput('');
+      setImagePreview(null);
+      setImageFile(null);
+      setGenerating(true);
+
       setMessages(prev => {
-        const updated = [...prev];
-        updated[assistantIdxRef.current] = {
-          ...updated[assistantIdxRef.current],
-          text: result.text || accumulated,
-          stats: { tokens: result.tokensUsed, tokPerSec: result.tokensPerSecond, latencyMs: result.latencyMs },
-        };
-        return updated;
+        assistantIdxRef.current = prev.length + 1;
+        return [
+          ...prev,
+          { role: 'user', text, tool: activeTool ?? undefined, attachments: attachments.length > 0 ? attachments : undefined },
+          { role: 'assistant', text: '', tool: activeTool ?? undefined },
+        ];
       });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[assistantIdxRef.current] = { ...updated[assistantIdxRef.current], text: `Error: ${msg}` };
-        return updated;
-      });
-    } finally {
-      cancelRef.current = null;
+
+      try {
+        const systemPrompt = SYSTEM_PROMPTS[activeTool || 'default'];
+        const modeConfig = getModelForMode(currentMode);
+        const fullPrompt = systemPrompt + '\n\nUser: ' + text;
+
+        const { stream, result: resultPromise, cancel } = await TextGeneration.generateStream(
+          fullPrompt,
+          { maxTokens: modeConfig.maxTokens, temperature: modeConfig.temperature }
+        );
+        cancelRef.current = cancel;
+
+        let accumulated = '';
+        for await (const token of stream) {
+          // Check if generation was cancelled
+          if (cancelRef.current === null) {
+            console.log('[UnifiedChat] Generation cancelled by user');
+            break;
+          }
+
+          accumulated += token;
+          setMessages(prev => {
+            const updated = [...prev];
+            if (updated[assistantIdxRef.current]) {
+              updated[assistantIdxRef.current] = { 
+                ...updated[assistantIdxRef.current], 
+                text: accumulated 
+              };
+            }
+            return updated;
+          });
+        }
+
+        const result = await resultPromise;
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[assistantIdxRef.current]) {
+            updated[assistantIdxRef.current] = {
+              ...updated[assistantIdxRef.current],
+              text: result.text || accumulated,
+              stats: { tokens: result.tokensUsed, tokPerSec: result.tokensPerSecond, latencyMs: result.latencyMs },
+            };
+          }
+          return updated;
+        });
+      } catch (streamErr) {
+        // Specific error handling for streaming failures
+        const msg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+        console.error('[UnifiedChat] Stream error:', streamErr);
+        
+        let errorMessage = '⚠️ **Generation error**\n\n';
+        
+        if (msg.includes('timeout') || msg.includes('timed out')) {
+          errorMessage += 'The model took too long to respond. Try:\n- Switching to **Fast mode** for quicker responses\n- Shortening your prompt\n- Refreshing the page';
+        } else if (msg.includes('aborted') || msg.includes('cancelled')) {
+          errorMessage += 'Generation was cancelled.';
+        } else if (msg.includes('memory') || msg.includes('allocation')) {
+          errorMessage += 'Out of memory. Try:\n- Closing other browser tabs\n- Refreshing the page\n- Using **Fast mode** (requires less memory)';
+        } else {
+          errorMessage += `${msg}\n\nTry refreshing the page or switching to **Fast mode**.`;
+        }
+        
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[assistantIdxRef.current]) {
+            updated[assistantIdxRef.current] = { 
+              ...updated[assistantIdxRef.current], 
+              text: errorMessage 
+            };
+          }
+          return updated;
+        });
+      } finally {
+        cancelRef.current = null;
+        setGenerating(false);
+      }
+    } catch (outerErr) {
+      // Top-level error handling for catastrophic failures
+      const msg = outerErr instanceof Error ? outerErr.message : String(outerErr);
+      console.error('[UnifiedChat] Fatal error in send():', outerErr);
+      
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', text: `❌ **Fatal error**\n\n${msg}\n\nPlease refresh the page. If the issue persists, try:\n1. Clearing browser cache\n2. Checking browser console for errors\n3. Using Chrome/Edge 120+` },
+      ]);
+      
       setGenerating(false);
+      cancelRef.current = null;
     }
-  }, [input, generating, loader, selectedTool, imagePreview, imageFile]);
+  }, [input, generating, loader, selectedTool, imagePreview, imageFile, currentMode]);
 
   // ── Research pipeline ──
   const runResearch = useCallback(async (query: string, attachments?: Message['attachments']) => {
@@ -376,7 +443,14 @@ export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
 
   return (
     <div className="unified-chat-container">
-      <ModelBanner state={loader.state} progress={loader.progress} error={loader.error} onLoad={loader.ensure} label="AI Engine" />
+      <ModelBanner 
+        state={loader.state} 
+        progress={loader.progress} 
+        error={loader.error} 
+        onLoad={loader.ensureBoth} 
+        label="AI Engine"
+        showDualDownload={true}
+      />
 
       <div className="unified-chat-layout">
         {/* Main chat area */}
@@ -625,7 +699,12 @@ export function UnifiedChat({ onBrainLog, onAgentStatus }: UnifiedChatProps) {
                     </button>
                   ) : (
                     <>
-                      <button className="unified-tool-btn" title="Voice input">
+                      <ModeSelector
+                        currentMode={currentMode}
+                        onModeChange={onModeChange}
+                        disabled={generating || researchRunning}
+                      />
+                      <button className="unified-tool-btn ml-1" title="Voice input">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />

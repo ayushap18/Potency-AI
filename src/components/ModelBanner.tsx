@@ -1,14 +1,16 @@
 import type { LoaderState } from '../hooks/useModelLoader';
+import type { DualLoaderState } from '../hooks/useDualModelLoader';
 
 interface Props {
-  state: LoaderState;
+  state: LoaderState | DualLoaderState;
   progress: number;
   error: string | null;
   onLoad: () => void;
   label: string;
+  showDualDownload?: boolean; // NEW: Show "Download Both Models" button
 }
 
-export function ModelBanner({ state, progress, error, onLoad, label }: Props) {
+export function ModelBanner({ state, progress, error, onLoad, label, showDualDownload }: Props) {
   if (state === 'ready') return null;
 
   return (
@@ -16,14 +18,25 @@ export function ModelBanner({ state, progress, error, onLoad, label }: Props) {
       {state === 'idle' && (
         <>
           <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-xl" style={{ color: 'var(--text-muted)' }}>download_for_offline</span>
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>No {label} model loaded.</span>
+            <span className="material-symbols-outlined text-xl" style={{ color: 'var(--text-muted)' }}>
+              download_for_offline
+            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                No {label} model loaded.
+              </span>
+              {showDualDownload && (
+                <span className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Downloads both Fast (350M) and Thinking/Pro (1.2B) models
+                </span>
+              )}
+            </div>
           </div>
           <button
             className="btn-primary px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest w-full md:w-auto"
             onClick={onLoad}
           >
-            Download & Load
+            {showDualDownload ? 'Download Both Models' : 'Download & Load'}
           </button>
         </>
       )}
@@ -33,12 +46,21 @@ export function ModelBanner({ state, progress, error, onLoad, label }: Props) {
             <span className="flex items-center gap-2">
               <span className="material-symbols-outlined text-sm animate-pulse">cloud_download</span>
               Downloading {label}...
+              {showDualDownload && <span className="text-[10px] opacity-60">(Both models)</span>}
             </span>
             <span>{(progress * 100).toFixed(0)}%</span>
           </div>
           <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--glass-bg-strong)' }}>
-            <div className="h-full rounded-full transition-all duration-300" style={{ width: `${progress * 100}%`, background: 'var(--accent)' }} />
+            <div 
+              className="h-full rounded-full transition-all duration-300" 
+              style={{ width: `${progress * 100}%`, background: 'var(--accent)' }} 
+            />
           </div>
+          {showDualDownload && (
+            <p className="text-[10px] text-center mt-1" style={{ color: 'var(--text-muted)' }}>
+              This may take a few minutes. Fast model downloads first for quick access.
+            </p>
+          )}
         </div>
       )}
       {state === 'loading' && (
