@@ -14,7 +14,7 @@
  *   7. Follow-up Questions    ← local LLM
  */
 
-import { callLLMJson, streamLLM, LLMJsonParseError, LLMAbortError } from './localLLM';
+import { callLLMJson, streamLLM, LLMJsonParseError, LLMAbortError } from './ollamaLLM';
 import {
   INTENT_CLASSIFICATION,
   ARCHITECTURE_ANALYSIS,
@@ -148,7 +148,7 @@ export async function runResearchAgent(
     const intentPromise = callLLMJson<IntentResult>(
       INTENT_CLASSIFICATION.system,
       INTENT_CLASSIFICATION.user({ query }),
-      { maxTokens: 150, maxRetries: 0, signal },
+      { maxTokens: 300, maxRetries: 1, signal },
     ).catch((err) => {
       if (!isRecoverableError(err)) throw err;
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
@@ -161,7 +161,7 @@ export async function runResearchAgent(
     const searchQueryPromise = callLLMJson<{ queries: string[] }>(
       SEARCH_QUERY_GEN.system,
       SEARCH_QUERY_GEN.user({ query }),
-      { maxTokens: 100, maxRetries: 0, signal },
+      { maxTokens: 200, maxRetries: 1, signal },
     ).catch((err) => {
       if (!isRecoverableError(err)) throw err;
       console.warn('[Agent] Search query gen failed:', err instanceof Error ? err.message : 'Unknown');
@@ -219,7 +219,7 @@ export async function runResearchAgent(
             use_case: intent.domain,
             context: truncateAtSentence(contextText, 1500),
           }),
-          { maxTokens: 300, maxRetries: 0, signal },
+          { maxTokens: 600, maxRetries: 1, signal },
         );
         analysisText = JSON.stringify(compRaw, null, 2);
         emit('analysis', 'done');
@@ -238,9 +238,9 @@ export async function runResearchAgent(
           ARCHITECTURE_ANALYSIS.user({
             technology,
             query,
-            context: truncateAtSentence(contextText, 1500),
+            context: truncateAtSentence(contextText, 3000),
           }),
-          { maxTokens: 300, maxRetries: 0, signal },
+          { maxTokens: 600, maxRetries: 1, signal },
         );
         analysisText = JSON.stringify(archRaw, null, 2);
         emit('analysis', 'done');
@@ -273,7 +273,7 @@ export async function runResearchAgent(
         analysis: synthesisContext,
         mode: intent.mode,
       }),
-      600,
+      2048,
       0.35,
       signal,
     );

@@ -12,11 +12,12 @@ import { ChatTab }   from './components/ChatTab';
 import { VoiceTab }  from './components/VoiceTab';
 import { VisionTab } from './components/VisionTab';
 import { ToolsTab }  from './components/ToolsTab';
+import { RAGTab }    from './components/RAGTab';
 import { CursorGrid } from './components/CursorGrid';
 import { useTheme, ACCENT_COLORS, type AccentColor, type ThemeMode, type BackgroundStyle } from './context/ThemeContext';
 
 // ── Types ──
-type ToolView = 'agent' | 'chat' | 'voice' | 'vision' | 'tools';
+type ToolView = 'agent' | 'chat' | 'voice' | 'vision' | 'tools' | 'rag';
 
 const NAV_ITEMS: { id: ToolView; icon: string; label: string }[] = [
   { id: 'agent',  icon: '🔬', label: 'Research'       },
@@ -24,6 +25,7 @@ const NAV_ITEMS: { id: ToolView; icon: string; label: string }[] = [
   { id: 'voice',  icon: '🎙️', label: 'Speech to Text' },
   { id: 'vision', icon: '📷', label: 'Vision'          },
   { id: 'tools',  icon: '🔧', label: 'Tools'           },
+  { id: 'rag',    icon: '🧠', label: 'RAG / Ollama'    },
 ];
 
 // ── SVG Icon helpers ──
@@ -506,6 +508,7 @@ export function App() {
           <div style={{ display: activeView === 'voice'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VoiceTab /></div>
           <div style={{ display: activeView === 'vision' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VisionTab /></div>
           <div style={{ display: activeView === 'tools'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><ToolsTab /></div>
+          <div style={{ display: activeView === 'rag'    ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><RAGTab /></div>
         </main>
       </div>
 

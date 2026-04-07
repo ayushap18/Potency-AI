@@ -3,11 +3,9 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { ModelCategory } from '@runanywhere/web';
-import { useModelLoader } from '../hooks/useModelLoader';
-import { ModelBanner } from './ModelBanner';
 import { runResearchAgent, type PipelineStageId, type PipelineStatus, type FinalResult } from '../agent/agent';
 import type { RetrievedSource } from '../agent/retrieval';
+import { checkOllamaStatus } from '../services/ollama';
 import { pushHistory } from '../App';
 
 // ── Pipeline stage descriptors ──
@@ -68,7 +66,17 @@ function MarkdownContent({ text }: { text: string }) {
 
 // ── Main component ──
 export function AgentTab() {
-  const loader = useModelLoader(ModelCategory.Language);
+  const [ollamaReady, setOllamaReady] = useState<'checking' | 'connected' | 'disconnected'>('checking');
+
+  useEffect(() => {
+    const check = async () => {
+      const status = await checkOllamaStatus();
+      setOllamaReady(status.running && status.models.some(m => m.includes('gemma4')) ? 'connected' : status.running ? 'disconnected' : 'disconnected');
+    };
+    check();
+    const id = setInterval(check, 15_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [query, setQuery] = useState('');
   const [running, setRunning] = useState(false);
@@ -99,14 +107,10 @@ export function AgentTab() {
   };
 
   const run = useCallback(async () => {
-    if (!query.trim() || running) return;
-    if (loader.state !== 'ready') {
-      const ok = await loader.ensure();
-      if (!ok) return;
-    }
+    if (!query.trim() || running || ollamaReady !== 'connected') return;
     reset();
     setRunning(true);
-    
+
     const controller = new AbortController();
     abortRef.current = controller;
     pushHistory('research', query.trim());
@@ -137,7 +141,7 @@ export function AgentTab() {
         });
       },
     }, { signal: controller.signal });
-  }, [query, running, loader]);
+  }, [query, running, ollamaReady]);
 
   const stop = () => { 
     abortRef.current?.abort(); 
@@ -150,7 +154,36 @@ export function AgentTab() {
 
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 space-y-6 overflow-y-auto custom-scrollbar">
-      <ModelBanner state={loader.state} progress={loader.progress} error={loader.error} onLoad={loader.ensure} label="Research Engine" />
+      {/* Ollama Status */}
+      {ollamaReady === 'disconnected' && (
+        <div className="glass-panel rounded-xl p-4 flex items-center gap-4">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: 'var(--ax-error)' }} />
+          </span>
+          <div className="flex-1">
+            <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Ollama + Gemma 4 Required</p>
+            <p className="text-[10px] font-mono mt-0.5" style={{ color: 'var(--text-muted)' }}>
+              Run <code style={{ color: 'var(--accent)' }}>ollama serve</code> and ensure <code style={{ color: 'var(--accent)' }}>gemma4</code> is pulled.
+            </p>
+          </div>
+        </div>
+      )}
+      {ollamaReady === 'connected' && (
+        <div className="glass-panel rounded-xl p-3 flex items-center gap-3">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: 'var(--success)' }} />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5" style={{ background: 'var(--success)' }} />
+          </span>
+          <span className="text-xs font-mono font-bold" style={{ color: 'var(--text-primary)' }}>Gemma 4 via Ollama</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>Local · 9.6GB · No API Key</span>
+        </div>
+      )}
+      {ollamaReady === 'checking' && (
+        <div className="glass-panel rounded-xl p-3 flex items-center gap-3">
+          <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--text-muted)' }} />
+          <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>Checking Ollama...</span>
+        </div>
+      )}
 
       {/* ── Query Bar ── */}
       <div className="query-hero">
@@ -183,7 +216,7 @@ export function AgentTab() {
                 <button
                   className="research-btn"
                   onClick={run}
-                  disabled={!query.trim() || loader.state === 'error'}
+                  disabled={!query.trim() || ollamaReady !== 'connected'}
                 >
                   <span className="material-symbols-outlined text-xl mr-2">travel_explore</span>
                   Research
@@ -214,7 +247,7 @@ export function AgentTab() {
 
           <div className="flex items-center gap-2 mt-2 text-[10px] font-bold uppercase tracking-widest relative z-10 font-mono" style={{ color: 'var(--accent)' }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
-            100% Local · No API Key · On-Device Neural Engine
+            Gemma 4 · Ollama · 100% Local · No API Key
           </div>
         </div>
       </div>
