@@ -17,7 +17,6 @@
 import { callLLMJson, streamLLM, LLMJsonParseError, LLMAbortError } from './localLLM';
 import {
   INTENT_CLASSIFICATION,
-  RESEARCH_PLANNING,
   ARCHITECTURE_ANALYSIS,
   TRADEOFF_COMPARISON,
   SYNTHESIS,
@@ -131,9 +130,12 @@ export async function runResearchAgent(
   };
 
   try {
-    // ── Stage 1: Intent Classification ──
+    // ── Stage 1 + 2: Intent Classification & Search Query Gen (parallel) ──
+    // These two LLM calls don't depend on each other, so run them concurrently.
+    // This saves one full LLM round-trip (~2-5s on WASM).
     checkAborted();
     emit('intent', 'running');
+    emit('planning', 'running');
 
     let intent: IntentResult = {
       category: 'EXPLANATION',
@@ -141,56 +143,40 @@ export async function runResearchAgent(
       entities: [],
       domain: 'general',
     };
+    let searchQueries: string[] = [query];
 
-    try {
-      const raw = await callLLMJson<IntentResult>(
-        INTENT_CLASSIFICATION.system,
-        INTENT_CLASSIFICATION.user({ query }),
-        { maxTokens: 300, signal },
-      );
-      if (raw.category) intent = { ...intent, ...raw };
-      emit('intent', 'done', `${intent.category} · ${intent.mode}`);
-    } catch (err) {
+    const intentPromise = callLLMJson<IntentResult>(
+      INTENT_CLASSIFICATION.system,
+      INTENT_CLASSIFICATION.user({ query }),
+      { maxTokens: 150, maxRetries: 0, signal },
+    ).catch((err) => {
       if (!isRecoverableError(err)) throw err;
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       console.warn('[Agent] Intent classification failed, using defaults:', errMsg);
       emit('intent', 'partial', 'Using default intent', `Intent classification failed: ${errMsg}`);
-    }
+      return null;
+    });
 
-    // ── Stage 2: Research Planning ──
-    checkAborted();
-    emit('planning', 'running');
-
-    let searchQueries: string[] = [query];
-
-    try {
-      // Generate Wikipedia search queries
-      const sqRaw = await callLLMJson<{ queries: string[] }>(
-        SEARCH_QUERY_GEN.system,
-        SEARCH_QUERY_GEN.user({ query }),
-        { maxTokens: 200, signal },
-      );
-      if (sqRaw.queries?.length) {
-        searchQueries = [query, ...sqRaw.queries].slice(0, 4);
-      }
-
-      // Full research plan
-      const planRaw = await callLLMJson<{ objective?: string; tasks?: unknown[]; output_sections?: string[] }>(
-        RESEARCH_PLANNING.system,
-        RESEARCH_PLANNING.user({
-          intent: JSON.stringify(intent),
-          query,
-        }),
-        { maxTokens: 400, signal },
-      );
-      // planSections extracted but currently unused
-      emit('planning', 'done', `${searchQueries.length} search queries`);
-    } catch (err) {
+    // Search query generation runs concurrently with intent classification
+    const searchQueryPromise = callLLMJson<{ queries: string[] }>(
+      SEARCH_QUERY_GEN.system,
+      SEARCH_QUERY_GEN.user({ query }),
+      { maxTokens: 100, maxRetries: 0, signal },
+    ).catch((err) => {
       if (!isRecoverableError(err)) throw err;
-      const errMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.warn('[Agent] Research planning failed:', errMsg);
-      emit('planning', 'partial', 'Using basic search', `Planning failed: ${errMsg}`);
+      console.warn('[Agent] Search query gen failed:', err instanceof Error ? err.message : 'Unknown');
+      return null;
+    });
+
+    const [intentRaw, sqRaw] = await Promise.all([intentPromise, searchQueryPromise]);
+
+    if (intentRaw?.category) intent = { ...intent, ...intentRaw };
+    emit('intent', 'done', `${intent.category} · ${intent.mode}`);
+
+    if (sqRaw?.queries?.length) {
+      searchQueries = [query, ...sqRaw.queries].slice(0, 4);
     }
+    emit('planning', 'done', `${searchQueries.length} search queries`);
 
     // ── Stage 3: Source Retrieval ──
     checkAborted();
@@ -231,9 +217,9 @@ export async function runResearchAgent(
           TRADEOFF_COMPARISON.user({
             technologies: intent.entities.join(' vs '),
             use_case: intent.domain,
-            context: truncateAtSentence(contextText, 3000),
+            context: truncateAtSentence(contextText, 1500),
           }),
-          { maxTokens: 500, signal },
+          { maxTokens: 300, maxRetries: 0, signal },
         );
         analysisText = JSON.stringify(compRaw, null, 2);
         emit('analysis', 'done');
@@ -252,9 +238,9 @@ export async function runResearchAgent(
           ARCHITECTURE_ANALYSIS.user({
             technology,
             query,
-            context: truncateAtSentence(contextText, 3000),
+            context: truncateAtSentence(contextText, 1500),
           }),
-          { maxTokens: 500, signal },
+          { maxTokens: 300, maxRetries: 0, signal },
         );
         analysisText = JSON.stringify(archRaw, null, 2);
         emit('analysis', 'done');
@@ -273,7 +259,7 @@ export async function runResearchAgent(
 
     const synthesisContext = [
       analysisText ? `## Analysis\n${analysisText}` : '',
-      sources.length > 0 ? `## Sources\n${truncateAtSentence(contextText, 4000)}` : '',
+      sources.length > 0 ? `## Sources\n${truncateAtSentence(contextText, 2000)}` : '',
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -287,7 +273,7 @@ export async function runResearchAgent(
         analysis: synthesisContext,
         mode: intent.mode,
       }),
-      1400,
+      600,
       0.35,
       signal,
     );
@@ -310,9 +296,9 @@ export async function runResearchAgent(
         FOLLOW_UP.system,
         FOLLOW_UP.user({
           query,
-          report_summary: reportAccumulated.slice(0, 1000),
+          report_summary: reportAccumulated.slice(0, 400),
         }),
-        { maxTokens: 250, signal },
+        { maxTokens: 150, maxRetries: 0, signal },
       );
       followUps = fuRaw.questions ?? [];
       emit('followup', 'done');

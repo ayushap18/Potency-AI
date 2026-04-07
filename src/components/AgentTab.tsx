@@ -8,6 +8,7 @@ import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
 import { runResearchAgent, type PipelineStageId, type PipelineStatus, type FinalResult } from '../agent/agent';
 import type { RetrievedSource } from '../agent/retrieval';
+import { pushHistory } from '../App';
 
 // ── Pipeline stage descriptors ──
 interface StageInfo {
@@ -66,12 +67,7 @@ function MarkdownContent({ text }: { text: string }) {
 }
 
 // ── Main component ──
-interface AgentTabProps {
-  onBrainLog?: (msg: string) => void;
-  onAgentStatus?: (agent: string, status: 'idle' | 'running' | 'done' | 'error') => void;
-}
-
-export function AgentTab({ onBrainLog, onAgentStatus }: AgentTabProps = {}) {
+export function AgentTab() {
   const loader = useModelLoader(ModelCategory.Language);
 
   const [query, setQuery] = useState('');
@@ -111,36 +107,15 @@ export function AgentTab({ onBrainLog, onAgentStatus }: AgentTabProps = {}) {
     reset();
     setRunning(true);
     
-    // Create new abort controller for this run
     const controller = new AbortController();
     abortRef.current = controller;
-    
-    // Map pipeline stages to agent brain cards
-    const stageToAgent: Record<PipelineStageId, string> = {
-      intent: 'classifier', planning: 'planner', retrieval: 'retriever',
-      analysis: 'analyst', synthesis: 'writer', followup: 'writer',
-    };
-
-    onBrainLog?.(`[QUERY] ${query.trim().slice(0, 80)}`);
+    pushHistory('research', query.trim());
 
     await runResearchAgent(query.trim(), {
       onStageUpdate: ({ stage, status, detail, warning }) => {
         setStageStatuses((prev) => ({ ...prev, [stage]: status }));
         if (detail) setStageDetails((prev) => ({ ...prev, [stage]: detail }));
         if (warning) console.warn(`[${stage}] ${warning}`);
-
-        // Feed brain sidebar
-        const agent = stageToAgent[stage];
-        if (status === 'running') {
-          onAgentStatus?.(agent, 'running');
-          onBrainLog?.(`[${agent.toUpperCase()}] ${detail || STAGES.find(s => s.id === stage)?.description || 'working…'}`);
-        } else if (status === 'done') {
-          onAgentStatus?.(agent, 'done');
-          onBrainLog?.(`[${agent.toUpperCase()}] ✓ ${detail || 'complete'}`);
-        } else if (status === 'error' || status === 'partial') {
-          if (status === 'error') onAgentStatus?.(agent, 'error');
-          if (warning) onBrainLog?.(`[${agent.toUpperCase()}] ⚠ ${warning}`);
-        }
       },
       onToken: (token) => setStreamText((t) => t + token),
       onComplete: (r) => {
@@ -148,16 +123,11 @@ export function AgentTab({ onBrainLog, onAgentStatus }: AgentTabProps = {}) {
         setStreamText('');
         setRunning(false);
         abortRef.current = null;
-        onBrainLog?.(`[DONE] Report generated in ${(r.elapsedMs / 1000).toFixed(1)}s — ${r.sources.length} sources`);
-        // Reset all agents to idle
-        for (const a of Object.values(stageToAgent)) onAgentStatus?.(a, 'idle');
       },
       onError: (msg) => {
         setError(msg);
         setRunning(false);
         abortRef.current = null;
-        onBrainLog?.(`[ERROR] ${msg}`);
-        for (const a of Object.values(stageToAgent)) onAgentStatus?.(a, 'error');
         setStageStatuses((prev) => {
           const next = { ...prev };
           for (const k of Object.keys(next) as PipelineStageId[]) {

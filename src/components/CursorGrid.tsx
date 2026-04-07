@@ -11,16 +11,20 @@ import { useTheme } from '../context/ThemeContext';
 export function CursorGrid() {
   const { mode, backgroundStyle } = useTheme();
   const spotlightRef = useRef<HTMLDivElement>(null);
+  const crossSpotlightRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
   const mouseRef = useRef({ x: -9999, y: -9999 });
 
   const updateSpotlight = useCallback(() => {
+    const { x, y } = mouseRef.current;
+    const mask = `radial-gradient(280px circle at ${x}px ${y}px, black, transparent)`;
     if (spotlightRef.current) {
-      const { x, y } = mouseRef.current;
-      spotlightRef.current.style.maskImage = 
-        `radial-gradient(280px circle at ${x}px ${y}px, black, transparent)`;
-      spotlightRef.current.style.webkitMaskImage = 
-        `radial-gradient(280px circle at ${x}px ${y}px, black, transparent)`;
+      spotlightRef.current.style.maskImage = mask;
+      spotlightRef.current.style.webkitMaskImage = mask;
+    }
+    if (crossSpotlightRef.current) {
+      crossSpotlightRef.current.style.maskImage = mask;
+      crossSpotlightRef.current.style.webkitMaskImage = mask;
     }
   }, []);
 
@@ -132,11 +136,12 @@ export function CursorGrid() {
 
       {/* Spotlight cross marks — follows cursor */}
       <div
+        ref={crossSpotlightRef}
         style={{
           position: 'absolute',
           inset: 0,
-          maskImage: spotlightRef.current?.style.maskImage || 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
-          WebkitMaskImage: spotlightRef.current?.style.webkitMaskImage || 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
+          maskImage: 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
+          WebkitMaskImage: 'radial-gradient(280px circle at -9999px -9999px, black, transparent)',
         }}
       >
         <svg
@@ -146,7 +151,6 @@ export function CursorGrid() {
             opacity: isDark ? 0.5 : 0.4,
           }}
         >
-          <use href="#cross-pattern" />
           <rect width="100%" height="100%" fill="url(#cross-pattern)" />
         </svg>
       </div>

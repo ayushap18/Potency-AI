@@ -74,7 +74,7 @@ async function searchWikipedia(
         return {
           title: data.title,
           url: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${encodeURIComponent(title)}`,
-          content: data.extract.slice(0, 2500), // cap per source
+          content: data.extract.slice(0, 1200), // cap per source — smaller for faster LLM processing
           type: 'wikipedia' as const,
         };
       }),

@@ -5,7 +5,7 @@
  * All original SDK init logic and component logic preserved.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { initSDK, getAccelerationMode } from './runanywhere';
 import { AgentTab }  from './components/AgentTab';
 import { ChatTab }   from './components/ChatTab';
@@ -27,14 +27,6 @@ const NAV_ITEMS: { id: ToolView; icon: string; label: string }[] = [
 ];
 
 // ── SVG Icon helpers ──
-function BrainIcon() {
-  return (
-    <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-    </svg>
-  );
-}
 function SettingsIcon() {
   return (
     <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -73,87 +65,6 @@ function MoonIcon() {
   );
 }
 
-// ── Agent Brain Sidebar ──
-const AGENT_CARDS = [
-  { key: 'classifier', label: 'CLASS', title: 'Classifier Agent' },
-  { key: 'planner',    label: 'PLAN',  title: 'Planner Agent'    },
-  { key: 'retriever',  label: 'FETCH', title: 'Retriever Agent'  },
-  { key: 'analyst',    label: 'ANAL',  title: 'Analyst Agent'    },
-  { key: 'writer',     label: 'WRITE', title: 'Writer Agent'     },
-];
-
-type AgentStatus = 'idle' | 'running' | 'done' | 'error';
-
-interface BrainSidebarProps {
-  open: boolean;
-  agentStatus: Record<string, AgentStatus>;
-  brainLog: string[];
-  onToggle: () => void;
-  activeView: ToolView;
-  onViewChange: (v: ToolView) => void;
-}
-
-function BrainSidebar({ open, agentStatus, brainLog, activeView, onViewChange }: BrainSidebarProps) {
-  const anyActive = Object.values(agentStatus).some(s => s === 'running' || s === 'done');
-
-  return (
-    <aside
-      id="brain-panel"
-      className={`brain-sidebar flex-col flex-shrink-0 ${open ? 'lg:flex' : 'hidden'}`}
-      style={{ width: 260, height: 'calc(100vh - 57px)', position: 'sticky', top: 57 }}
-    >
-      {/* Agent Brain Header */}
-      <div className="p-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-        <div className="flex items-center gap-2">
-          <div
-            id="brain-pulse"
-            className={`w-2 h-2 rounded-full transition-colors ${anyActive ? 'active' : ''}`}
-            style={{ background: anyActive ? 'var(--success)' : 'var(--text-muted)' }}
-          />
-          <span className="text-xs font-semibold tracking-widest font-mono" style={{ color: 'var(--text-muted)' }}>AGENT BRAIN</span>
-        </div>
-        <button
-          onClick={() => { /* clear log */ }}
-          className="text-[10px] font-mono transition-colors"
-          style={{ color: 'var(--text-muted)' }}
-        >
-          CLEAR
-        </button>
-      </div>
-
-      {/* Agent status cards */}
-      <div className="p-3 grid grid-cols-5 gap-1" style={{ borderBottom: '1px solid var(--glass-border)' }}>
-        {AGENT_CARDS.map((a) => (
-          <div
-            key={a.key}
-            className={`agent-card ${agentStatus[a.key] ?? 'idle'}`}
-            title={a.title}
-          >
-            <div className="agent-icon">{a.label.charAt(0)}</div>
-            <div className="agent-label">{a.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Brain feed */}
-      <div id="brain-feed" className="flex-1 overflow-y-auto p-3 space-y-1" style={{ fontSize: 11 }}>
-        {brainLog.length === 0 ? (
-          <div className="text-center py-6" style={{ color: 'var(--text-muted)' }}>// waiting for query...</div>
-        ) : (
-          brainLog.map((entry, i) => (
-            <div key={i} className="brain-entry system px-1">{entry}</div>
-          ))
-        )}
-      </div>
-
-      {/* Watched Pages */}
-      <div className="flex-shrink-0 mx-3 mb-3 p-3 rounded-lg glass-panel">
-        <h4 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>Watched Pages</h4>
-        <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>No pages being watched</p>
-      </div>
-    </aside>
-  );
-}
 
 // ── Settings Panel ──
 function SettingsPanel({ open, onClose, accel }: { open: boolean; onClose: () => void; accel: string | null }) {
@@ -262,8 +173,53 @@ function SettingsPanel({ open, onClose, accel }: { open: boolean; onClose: () =>
   );
 }
 
+// ── History entry type ──
+interface HistoryEntry {
+  id: string;
+  type: 'research' | 'chat' | 'tool';
+  query: string;
+  timestamp: number;
+}
+
+const LS_HISTORY = 'potency-history';
+
+function loadHistory(): HistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(LS_HISTORY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveHistory(entries: HistoryEntry[]) {
+  localStorage.setItem(LS_HISTORY, JSON.stringify(entries.slice(0, 50)));
+}
+
+/** Push a new entry (exported so tabs can call it) */
+export function pushHistory(type: HistoryEntry['type'], query: string) {
+  const entries = loadHistory();
+  entries.unshift({ id: crypto.randomUUID(), type, query: query.slice(0, 200), timestamp: Date.now() });
+  saveHistory(entries);
+}
+
 // ── History Panel ──
 function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [entries, setEntries] = useState<HistoryEntry[]>([]);
+
+  useEffect(() => {
+    if (open) setEntries(loadHistory());
+  }, [open]);
+
+  const clearHistory = () => { localStorage.removeItem(LS_HISTORY); setEntries([]); };
+
+  const fmtTime = (ts: number) => {
+    const d = new Date(ts);
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const typeIcon: Record<string, string> = { research: 'travel_explore', chat: 'forum', tool: 'build' };
+
   return (
     <>
       {open && <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40" onClick={onClose} />}
@@ -274,9 +230,28 @@ function HistoryPanel({ open, onClose }: { open: boolean; onClose: () => void })
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="font-semibold font-mono tracking-wider text-sm" style={{ color: 'var(--text-primary)' }}>HISTORY</h2>
-            <button onClick={onClose} className="icon-btn"><CloseIcon /></button>
+            <div className="flex items-center gap-2">
+              {entries.length > 0 && (
+                <button onClick={clearHistory} className="text-[10px] font-mono uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>Clear</button>
+              )}
+              <button onClick={onClose} className="icon-btn"><CloseIcon /></button>
+            </div>
           </div>
-          <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>// no history yet</p>
+          {entries.length === 0 ? (
+            <p className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>No history yet — start a research query or chat.</p>
+          ) : (
+            <div className="space-y-2">
+              {entries.map((e) => (
+                <div key={e.id} className="glass-panel rounded-lg p-3 flex items-start gap-3">
+                  <span className="material-symbols-outlined text-sm mt-0.5" style={{ color: 'var(--accent)' }}>{typeIcon[e.type] ?? 'history'}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs line-clamp-2 leading-relaxed" style={{ color: 'var(--text-primary)' }}>{e.query}</p>
+                    <span className="text-[10px] font-mono" style={{ color: 'var(--text-muted)' }}>{fmtTime(e.timestamp)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -291,17 +266,10 @@ export function App() {
   const [accel,     setAccel]     = useState<string | null>(null);
 
   // Shell UI state
-  const [brainOpen,    setBrainOpen]    = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen,  setHistoryOpen]  = useState(false);
   const [activeView,   setActiveView]   = useState<ToolView>('agent');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  // Brain sidebar data
-  const [agentStatus, setAgentStatus] = useState<Record<string, AgentStatus>>({
-    classifier: 'idle', planner: 'idle', retriever: 'idle', analyst: 'idle', writer: 'idle',
-  });
-  const [brainLog, setBrainLog] = useState<string[]>([]);
 
   // Connectivity
   const [connectivity, setConnectivity] = useState<'checking' | 'good' | 'poor'>('checking');
@@ -333,17 +301,6 @@ export function App() {
     const id = setInterval(check, 30_000);
     return () => clearInterval(id);
   }, []);
-
-  // ── Brain log helpers ──
-  const pushBrainLog = useCallback((msg: string) => {
-    setBrainLog(prev => [...prev.slice(-80), msg]);
-  }, []);
-
-  const updateAgentStatus = useCallback((agent: string, status: AgentStatus) => {
-    setAgentStatus(prev => ({ ...prev, [agent]: status }));
-    if (status === 'running') pushBrainLog(`[${agent.toUpperCase()}] starting…`);
-    if (status === 'done')    pushBrainLog(`[${agent.toUpperCase()}] complete ✓`);
-  }, [pushBrainLog]);
 
   // Connectivity dot
   const connDot = connectivity === 'good'
@@ -440,15 +397,6 @@ export function App() {
             {/* Theme toggle */}
             <button onClick={toggleMode} className="header-btn" title="Toggle theme">
               {mode === 'dark' ? <SunIcon /> : <MoonIcon />}
-            </button>
-
-            {/* Brain toggle */}
-            <button
-              onClick={() => setBrainOpen(o => !o)}
-              className={`header-btn ${brainOpen ? 'active' : ''}`}
-              title="Agent Brain"
-            >
-              <BrainIcon />
             </button>
 
             {/* Settings */}
@@ -549,20 +497,10 @@ export function App() {
           </>
         )}
 
-        {/* ── Agent Brain Sidebar ── */}
-        <BrainSidebar
-          open={brainOpen}
-          agentStatus={agentStatus}
-          brainLog={brainLog}
-          onToggle={() => setBrainOpen(o => !o)}
-          activeView={activeView}
-          onViewChange={(v) => setActiveView(v)}
-        />
-
         {/* ── Main Content ── */}
         <main className="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
           <div style={{ display: activeView === 'agent' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}>
-            <AgentTab onBrainLog={pushBrainLog} onAgentStatus={updateAgentStatus} />
+            <AgentTab />
           </div>
           <div style={{ display: activeView === 'chat'   ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><ChatTab /></div>
           <div style={{ display: activeView === 'voice'  ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: '100%' }}><VoiceTab /></div>

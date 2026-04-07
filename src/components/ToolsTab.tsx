@@ -1,12 +1,14 @@
 import { ModelCategory } from '@runanywhere/web';
 import {
   ToolCalling, ToolCallFormat, toToolValue, getStringArg, getNumberArg,
+  TextGeneration,
   type ToolDefinition, type ToolCall, type ToolResult, type ToolCallingResult, type ToolValue,
 } from '@runanywhere/web-llamacpp';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
 import { ModelManagerPanel } from './ModelManagerPanel';
+import { pushHistory } from '../App';
 
 // ── Demo tools ──
 const DEMO_TOOLS: { def: ToolDefinition; executor: Parameters<typeof ToolCalling.registerTool>[1] }[] = [
@@ -43,6 +45,76 @@ const DEMO_TOOLS: { def: ToolDefinition; executor: Parameters<typeof ToolCalling
   },
 ];
 
+// ── Fallback tool execution for unreliable small-model tool calling ──
+
+const CITY_TIMEZONES: Record<string, string> = {
+  'tokyo': 'Asia/Tokyo', 'london': 'Europe/London', 'new york': 'America/New_York',
+  'los angeles': 'America/Los_Angeles', 'san francisco': 'America/Los_Angeles',
+  'paris': 'Europe/Paris', 'berlin': 'Europe/Berlin', 'sydney': 'Australia/Sydney',
+  'mumbai': 'Asia/Kolkata', 'delhi': 'Asia/Kolkata', 'kolkata': 'Asia/Kolkata',
+  'beijing': 'Asia/Shanghai', 'shanghai': 'Asia/Shanghai', 'dubai': 'Asia/Dubai',
+  'singapore': 'Asia/Singapore', 'hong kong': 'Asia/Hong_Kong', 'seoul': 'Asia/Seoul',
+  'moscow': 'Europe/Moscow', 'chicago': 'America/Chicago', 'toronto': 'America/Toronto',
+  'denver': 'America/Denver', 'cairo': 'Africa/Cairo', 'istanbul': 'Europe/Istanbul',
+  'bangkok': 'Asia/Bangkok', 'jakarta': 'Asia/Jakarta', 'sao paulo': 'America/Sao_Paulo',
+  'mexico city': 'America/Mexico_City', 'rome': 'Europe/Rome', 'madrid': 'Europe/Madrid',
+  'amsterdam': 'Europe/Amsterdam', 'zurich': 'Europe/Zurich', 'honolulu': 'Pacific/Honolulu',
+  'anchorage': 'America/Anchorage', 'auckland': 'Pacific/Auckland', 'johannesburg': 'Africa/Johannesburg',
+};
+
+/** Infer tool arguments from the user's natural-language query */
+function inferArgsFromQuery(toolName: string, queryLower: string, rawQuery: string): Record<string, ToolValue> {
+  if (toolName === 'get_time') {
+    for (const [city, tz] of Object.entries(CITY_TIMEZONES)) {
+      if (queryLower.includes(city)) return { timezone: toToolValue(tz) };
+    }
+    return { timezone: toToolValue('UTC') };
+  }
+  if (toolName === 'get_weather') {
+    const m = rawQuery.match(/(?:in|for|at)\s+([A-Z][a-zA-Z\s]+?)(?:\?|$|,|\.)/);
+    return { location: toToolValue(m?.[1]?.trim() ?? 'Unknown') };
+  }
+  if (toolName === 'calculate') {
+    const m = rawQuery.match(/(?:what is|calculate|compute|solve|evaluate)\s+(.+?)(?:\?|$)/i);
+    return m ? { expression: toToolValue(m[1].trim()) } : {};
+  }
+  if (toolName === 'random_number') {
+    const m = rawQuery.match(/between\s+(\d+)\s+and\s+(\d+)/i);
+    return { min: toToolValue(m ? parseInt(m[1]) : 1), max: toToolValue(m ? parseInt(m[2]) : 100) };
+  }
+  return {};
+}
+
+/**
+ * When the model describes a tool call in text instead of using the structured format,
+ * extract the tool name and arguments so we can execute it manually.
+ */
+function extractFallbackToolCall(
+  modelText: string, userQuery: string, tools: ToolDefinition[],
+): { toolName: string; args: Record<string, ToolValue> } | null {
+  const textLower = modelText.toLowerCase();
+  const queryLower = userQuery.toLowerCase();
+  for (const tool of tools) {
+    if (!textLower.includes(tool.name)) continue;
+    // Try to parse explicit call syntax: tool_name(key="value", ...)
+    const callMatch = modelText.match(new RegExp(`${tool.name}\\s*\\(([^)]*)\\)`, 'i'));
+    if (callMatch?.[1]) {
+      const args: Record<string, ToolValue> = {};
+      const argPat = /(\w+)\s*[=:]\s*(?:"([^"]*)"|'([^']*)'|([\w./+-]+))/g;
+      let m;
+      while ((m = argPat.exec(callMatch[1])) !== null) {
+        const val = m[2] ?? m[3] ?? m[4];
+        const num = Number(val);
+        args[m[1]] = toToolValue(!isNaN(num) && !val.includes('/') ? num : val);
+      }
+      if (Object.keys(args).length > 0) return { toolName: tool.name, args };
+    }
+    // Tool mentioned but no parseable call syntax — infer args from query
+    return { toolName: tool.name, args: inferArgsFromQuery(tool.name, queryLower, userQuery) };
+  }
+  return null;
+}
+
 interface TraceStep { type: 'user' | 'tool_call' | 'tool_result' | 'response'; content: string; detail?: ToolCall | ToolResult; }
 interface ParamDraft { name: string; type: 'string' | 'number' | 'boolean'; description: string; required: boolean; }
 const EMPTY_PARAM: ParamDraft = { name: '', type: 'string', description: '', required: true };
@@ -60,13 +132,18 @@ export function ToolsTab() {
   const [showToolForm, setShowToolForm] = useState(false);
   const [showRegistry, setShowRegistry] = useState(false);
   const traceRef = useRef<HTMLDivElement>(null);
+  const executorMapRef = useRef(new Map<string, (args: Record<string, ToolValue>) => Promise<Record<string, ToolValue>>>());
   const [toolName, setToolName] = useState('');
   const [toolDesc, setToolDesc] = useState('');
   const [toolParams, setToolParams] = useState<ParamDraft[]>([{ ...EMPTY_PARAM }]);
 
   useEffect(() => {
     ToolCalling.clearTools();
-    for (const { def, executor } of DEMO_TOOLS) ToolCalling.registerTool(def, executor);
+    executorMapRef.current.clear();
+    for (const { def, executor } of DEMO_TOOLS) {
+      ToolCalling.registerTool(def, executor);
+      executorMapRef.current.set(def.name, executor);
+    }
     setRegisteredTools(ToolCalling.getRegisteredTools());
     return () => { ToolCalling.clearTools(); };
   }, []);
@@ -79,26 +156,59 @@ export function ToolsTab() {
     const text = input.trim(); if (!text || generating) return;
     if (loader.state !== 'ready') { const ok = await loader.ensure(); if (!ok) return; }
     setInput(''); setGenerating(true); setTrace([{ type: 'user', content: text }]);
+    pushHistory('tool', text);
     try {
-      const result: ToolCallingResult = await ToolCalling.generateWithTools(text, { autoExecute, maxToolCalls: 5, temperature: 0.3, maxTokens: 512, format: ToolCallFormat.Default });
+      const result: ToolCallingResult = await ToolCalling.generateWithTools(text, { autoExecute, maxToolCalls: 5, temperature: 0.1, maxTokens: 512, format: ToolCallFormat.LFM2 });
       const steps: TraceStep[] = [{ type: 'user', content: text }];
-      for (let i = 0; i < result.toolCalls.length; i++) {
-        const call = result.toolCalls[i];
-        const argSummary = Object.entries(call.arguments).map(([k, v]) => `${k}=${JSON.stringify('value' in v ? v.value : v)}`).join(', ');
-        steps.push({ type: 'tool_call', content: `${call.toolName}(${argSummary})`, detail: call });
-        if (result.toolResults[i]) {
-          const res = result.toolResults[i];
-          const resultStr = res.success && res.result ? JSON.stringify(Object.fromEntries(Object.entries(res.result).map(([k, v]) => [k, 'value' in v ? v.value : v])), null, 2) : res.error ?? 'Unknown error';
-          steps.push({ type: 'tool_result', content: res.success ? resultStr : `Error: ${resultStr}`, detail: res });
+
+      if (result.toolCalls.length > 0) {
+        // Normal path — model used structured tool calling format
+        for (let i = 0; i < result.toolCalls.length; i++) {
+          const call = result.toolCalls[i];
+          const argSummary = Object.entries(call.arguments).map(([k, v]) => `${k}=${JSON.stringify('value' in v ? v.value : v)}`).join(', ');
+          steps.push({ type: 'tool_call', content: `${call.toolName}(${argSummary})`, detail: call });
+          if (result.toolResults[i]) {
+            const res = result.toolResults[i];
+            const resultStr = res.success && res.result ? JSON.stringify(Object.fromEntries(Object.entries(res.result).map(([k, v]) => [k, 'value' in v ? v.value : v])), null, 2) : res.error ?? 'Unknown error';
+            steps.push({ type: 'tool_result', content: res.success ? resultStr : `Error: ${resultStr}`, detail: res });
+          }
+        }
+        if (result.text) steps.push({ type: 'response', content: result.text });
+      } else {
+        // Fallback — model described tool usage in text instead of structured format.
+        // Extract the intended tool call and execute it directly.
+        const fallback = extractFallbackToolCall(result.text || '', text, registeredTools);
+        const executor = fallback ? executorMapRef.current.get(fallback.toolName) : null;
+        if (fallback && executor) {
+          const argSummary = Object.entries(fallback.args).map(([k, v]) => `${k}=${JSON.stringify('value' in v ? v.value : v)}`).join(', ');
+          steps.push({ type: 'tool_call', content: `${fallback.toolName}(${argSummary})` });
+          try {
+            const toolResult = await executor(fallback.args);
+            const resultStr = JSON.stringify(
+              Object.fromEntries(Object.entries(toolResult).map(([k, v]) => [k, 'value' in v ? v.value : v])),
+              null, 2,
+            );
+            steps.push({ type: 'tool_result', content: resultStr });
+            // Generate brief natural-language answer from tool result
+            const prompt = `System: Answer the user's question using the tool result. Be brief and direct.\n\nUser: ${text}\nTool result: ${resultStr}\n\nAssistant:`;
+            const { result: genResult } = await TextGeneration.generateStream(prompt, { maxTokens: 100, temperature: 0.3 });
+            const gen = await genResult;
+            if (gen.text.trim()) steps.push({ type: 'response', content: gen.text.trim() });
+          } catch (toolErr) {
+            steps.push({ type: 'tool_result', content: `Error: ${toolErr instanceof Error ? toolErr.message : String(toolErr)}` });
+          }
+        } else if (result.text) {
+          // No tool detected at all — show raw model output
+          steps.push({ type: 'response', content: result.text });
         }
       }
-      if (result.text) steps.push({ type: 'response', content: result.text });
+
       setTrace(steps);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setTrace((prev) => [...prev, { type: 'response', content: `Error: ${msg}` }]);
     } finally { setGenerating(false); }
-  }, [input, generating, autoExecute, loader]);
+  }, [input, generating, autoExecute, loader, registeredTools]);
 
   const addParam = () => setToolParams((p) => [...p, { ...EMPTY_PARAM }]);
   const updateParam = (idx: number, field: keyof ParamDraft, value: string | boolean) => setToolParams((prev) => prev.map((p, i) => (i === idx ? { ...p, [field]: value } : p)));
@@ -115,10 +225,11 @@ export function ToolsTab() {
       return result;
     };
     ToolCalling.registerTool(def, executor);
+    executorMapRef.current.set(name, executor);
     refreshRegistry(); setToolName(''); setToolDesc(''); setToolParams([{ ...EMPTY_PARAM }]); setShowToolForm(false);
   };
 
-  const unregisterTool = (name: string) => { ToolCalling.unregisterTool(name); refreshRegistry(); };
+  const unregisterTool = (name: string) => { ToolCalling.unregisterTool(name); executorMapRef.current.delete(name); refreshRegistry(); };
 
   return (
     <div className="flex-1 flex flex-col p-4 md:p-8 space-y-6 overflow-y-auto custom-scrollbar relative h-full">

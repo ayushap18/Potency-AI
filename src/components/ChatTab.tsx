@@ -3,6 +3,7 @@ import { ModelCategory, ModelManager } from '@runanywhere/web';
 import { TextGeneration } from '@runanywhere/web-llamacpp';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
+import { pushHistory } from '../App';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -33,6 +34,7 @@ export function ChatTab() {
     }
     setInput('');
     setGenerating(true);
+    pushHistory('chat', text);
     setMessages((prev) => {
       assistantIdxRef.current = prev.length + 1;
       return [...prev, { role: 'user' as const, text }, { role: 'assistant' as const, text: '' }];
@@ -137,7 +139,7 @@ export function ChatTab() {
             </div>
           </div>
         ))}
-        {generating && messages[messages.length - 1]?.role === 'user' && (
+        {generating && messages[messages.length - 1]?.text === '' && (
           <div className="flex justify-start">
             <div className="glass-panel p-5 rounded-2xl rounded-bl-sm flex items-center gap-2">
               <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--accent)' }} />
