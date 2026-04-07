@@ -31,8 +31,18 @@ import vlmWorkerUrl from './workers/vlm-worker?worker&url';
 // ---------------------------------------------------------------------------
 
 const MODELS: CompactModelDef[] = [
-  // LLM — Liquid AI LFM2 1.2B Tool (optimized for tool calling & function calling)
-  // Listed first as primary model for Agent tasks requiring JSON output
+  // LLM — Google Gemma 4 E2B IT (2.3B effective params, 128K context, tool calling)
+  // Primary model — better reasoning, tool use, and multilingual support
+  {
+    id: 'gemma-4-e2b-it-q4_k_m',
+    name: 'Gemma 4 E2B IT Q4_K_M',
+    repo: 'bartowski/google_gemma-4-E2B-it-GGUF',
+    files: ['google_gemma-4-E2B-it-Q4_K_M.gguf'],
+    framework: LLMFramework.LlamaCpp,
+    modality: ModelCategory.Language,
+    memoryRequirement: 3_600_000_000,
+  },
+  // LLM — Liquid AI LFM2 1.2B Tool (fallback — smaller, optimized for tool calling)
   {
     id: 'lfm2-1.2b-tool-q4_k_m',
     name: 'LFM2 1.2B Tool Q4_K_M',
@@ -42,7 +52,7 @@ const MODELS: CompactModelDef[] = [
     modality: ModelCategory.Language,
     memoryRequirement: 800_000_000,
   },
-  // LLM — Liquid AI LFM2 350M (small + fast for simple chat - fallback option)
+  // LLM — Liquid AI LFM2 350M (smallest fallback for simple chat)
   {
     id: 'lfm2-350m-q4_k_m',
     name: 'LFM2 350M Q4_K_M',
@@ -112,7 +122,14 @@ export async function initSDK(): Promise<void> {
     });
 
     // Step 2: Register backends (loads WASM automatically)
-    await LlamaCPP.register();
+    // Try WebGPU first for GPU-accelerated inference (2-4x faster).
+    // Falls back to CPU WASM if WebGPU is unavailable.
+    try {
+      await LlamaCPP.register({ acceleration: 'webgpu' });
+    } catch {
+      console.warn('[SDK] WebGPU not available, falling back to CPU WASM');
+      await LlamaCPP.register({ acceleration: 'cpu' });
+    }
     await ONNX.register();
 
     // Step 3: Register model catalog

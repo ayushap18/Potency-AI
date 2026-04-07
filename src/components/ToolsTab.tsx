@@ -9,6 +9,7 @@ import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
 import { ModelManagerPanel } from './ModelManagerPanel';
 import { pushHistory } from '../App';
+import { formatPrompt } from '../agent/localLLM';
 
 // ── Demo tools ──
 const DEMO_TOOLS: { def: ToolDefinition; executor: Parameters<typeof ToolCalling.registerTool>[1] }[] = [
@@ -158,7 +159,7 @@ export function ToolsTab() {
     setInput(''); setGenerating(true); setTrace([{ type: 'user', content: text }]);
     pushHistory('tool', text);
     try {
-      const result: ToolCallingResult = await ToolCalling.generateWithTools(text, { autoExecute, maxToolCalls: 5, temperature: 0.1, maxTokens: 512, format: ToolCallFormat.LFM2 });
+      const result: ToolCallingResult = await ToolCalling.generateWithTools(text, { autoExecute, maxToolCalls: 5, temperature: 0.1, maxTokens: 512, format: ToolCallFormat.Default });
       const steps: TraceStep[] = [{ type: 'user', content: text }];
 
       if (result.toolCalls.length > 0) {
@@ -190,7 +191,7 @@ export function ToolsTab() {
             );
             steps.push({ type: 'tool_result', content: resultStr });
             // Generate brief natural-language answer from tool result
-            const prompt = `System: Answer the user's question using the tool result. Be brief and direct.\n\nUser: ${text}\nTool result: ${resultStr}\n\nAssistant:`;
+            const prompt = formatPrompt('Answer the user\'s question using the tool result. Be brief and direct.', `${text}\nTool result: ${resultStr}`);
             const { result: genResult } = await TextGeneration.generateStream(prompt, { maxTokens: 100, temperature: 0.3 });
             const gen = await genResult;
             if (gen.text.trim()) steps.push({ type: 'response', content: gen.text.trim() });

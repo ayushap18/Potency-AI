@@ -4,6 +4,7 @@ import { TextGeneration } from '@runanywhere/web-llamacpp';
 import { useModelLoader } from '../hooks/useModelLoader';
 import { ModelBanner } from './ModelBanner';
 import { pushHistory } from '../App';
+import { formatChatMessage } from '../agent/localLLM';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -40,7 +41,7 @@ export function ChatTab() {
       return [...prev, { role: 'user' as const, text }, { role: 'assistant' as const, text: '' }];
     });
     try {
-      const { stream, result: resultPromise, cancel } = await TextGeneration.generateStream(text, { maxTokens: 512, temperature: 0.7 });
+      const { stream, result: resultPromise, cancel } = await TextGeneration.generateStream(formatChatMessage(text), { maxTokens: 512, temperature: 0.7 });
       cancelRef.current = cancel;
       let accumulated = '';
       for await (const token of stream) {

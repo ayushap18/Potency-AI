@@ -5,6 +5,7 @@
  */
 
 import { TextGeneration } from '@runanywhere/web-llamacpp';
+import { ModelManager, ModelCategory } from '@runanywhere/web';
 
 /** Error thrown when LLM JSON parsing fails after all retries */
 export class LLMJsonParseError extends Error {
@@ -153,7 +154,29 @@ export async function callLLMJson<T = Record<string, unknown>>(
   throw new LLMJsonParseError(lastRaw);
 }
 
-function formatPrompt(system: string, user: string): string {
-  // Generic instruction-tuned format compatible with LFM2 models
+/** Check if the loaded Language model is a Gemma model. */
+function isGemmaLoaded(): boolean {
+  try {
+    const loaded = ModelManager.getLoadedModel(ModelCategory.Language);
+    return !!loaded && loaded.id.includes('gemma');
+  } catch {
+    return false;
+  }
+}
+
+export function formatPrompt(system: string, user: string): string {
+  if (isGemmaLoaded()) {
+    // Gemma chat template with system instruction in the user turn
+    return `<start_of_turn>user\n${system}\n\n${user}<end_of_turn>\n<start_of_turn>model\n`;
+  }
+  // LFM2 instruction format
   return `System: ${system}\n\nUser: ${user}\n\nAssistant:`;
+}
+
+/** Format a simple user message for the loaded model (no system prompt). */
+export function formatChatMessage(userMessage: string): string {
+  if (isGemmaLoaded()) {
+    return `<start_of_turn>user\n${userMessage}<end_of_turn>\n<start_of_turn>model\n`;
+  }
+  return `User: ${userMessage}\n\nAssistant:`;
 }
